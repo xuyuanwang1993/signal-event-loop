@@ -1,0 +1,25 @@
+
+#set debug/release
+if(${CMAKE_CXX_COMPILER} MATCHES ".*aarch64.*" )
+	set(PLATFORM_DIR "linux-aarch64")
+    set(__arm64__ TRUE)
+elseif(${CMAKE_CXX_COMPILER} MATCHES ".*arm.*" )
+	set(PLATFORM_DIR "linux-arm")
+	set(__arm__ TRUE)
+else()
+	set(PLATFORM_DIR "linux")
+	set(__linux__ TRUE)
+endif()
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+	set(PLATFORM_DIR "${PLATFORM_DIR}d")
+	set(CMAKE_BUILD_TYPE Debug CACHE STRING "set build type to debug")
+	add_definitions(-DDEBUG)
+else()
+	set(CMAKE_BUILD_TYPE Release CACHE STRING "set build type to release")
+endif()
+#安装路径
+set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+#安装目录
+set(CMAKE_INSTALL_LIBDIR "lib")
+set(CMAKE_INSTALL_BINDIR "bin")
+set(CMAKE_INSTALL_INCLUDEDIR "include")
