@@ -184,6 +184,7 @@ void DeviceDiscover::packetBufWithShellCommand(const std::string &shellcommand,C
 
 void DeviceDiscover::on_timeout()
 {
+#ifndef __ANDROID__
    //get local ip set
     struct ifaddrs *p_addrs = NULL;
     if (getifaddrs(&p_addrs) != 0)
@@ -197,6 +198,7 @@ void DeviceDiscover::on_timeout()
             new_ip_set.insert(inet_ntoa(addr->sin_addr));
         }
     }
+    if(p_addrs)freeifaddrs(p_addrs);
     //remove old ip
     for(auto i:localIpSet)
     {
@@ -215,4 +217,5 @@ void DeviceDiscover::on_timeout()
     }
     //swap
     std::swap(localIpSet,new_ip_set);
+#endif
 }

@@ -17,9 +17,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/un.h>
-#define LINSTENADDR "127.0.0.1"
-#define LINSTENPORT 8888
-#define LOCAL_SERVICE_NAME "/tmp/logo-progress-service.service"
+#include<sys/time.h>
 using namespace aimy::Local;
 static const uint32_t max_path_size=108;
 static  std::string tag="commandline";
@@ -100,31 +98,33 @@ localCommandLineTestTool::localCommandLineTestTool():m_threadRunning(false)
 
 }
 
-void localCommandLineTestTool::initServer(const std::string &serverHost, uint16_t serverPort)
+void localCommandLineTestTool::initServer(const std::string &serverHost)
 {
-    m_host=serverHost;
-    m_port=serverPort;
+    m_host=serverHost+".service";
     m_isserver=true;
     do{
-        sock.reset(new unix_dgram_socket(LOCAL_SERVICE_NAME));
+        sock.reset(new unix_dgram_socket(m_host));
         m_socket_fd=sock->build();
         if(m_socket_fd<=0)
         {
-            fprintf(stderr,"init unix socket %s failed[%s]\n",LOCAL_SERVICE_NAME,strerror(errno));
+            fprintf(stderr,"init unix socket %s failed[%s]\n",m_host.c_str(),strerror(errno));
             return;
         }
         defaultServerInit();
-        AIMY_WARNNING("init server success ->%s",LOCAL_SERVICE_NAME);
+        AIMY_WARNNING("init server success ->%s",m_host.c_str());
         return;
     }while(0);
 }
-void localCommandLineTestTool::initClient(bool quickExit, const std::string &serverHost, uint16_t serverPort)
+void localCommandLineTestTool::initClient(bool quickExit, const std::string &serverHost, uint32_t maxRecvCnt, uint32_t maxWaitMsec, bool keepAlive)
 {
     m_quickExit=quickExit;
-    m_host=serverHost;
-    m_port=serverPort;
+    m_host=serverHost+".service";
+    m_maxRecvCnt=maxRecvCnt;
+    m_recvWaitMsec=maxWaitMsec;
+    m_keepAlive=keepAlive;
+    if(m_recvWaitMsec==0)m_recvWaitMsec=200;
     do{
-        std::string path=std::string("/tmp/drm_logo_client_")+std::to_string(getpid())+".service";
+        std::string path=serverHost+"-"+std::to_string(getpid())+".client";
         sock.reset(new unix_dgram_socket(path));
         m_socket_fd=sock->build();
         if(m_socket_fd<=0)
@@ -132,7 +132,7 @@ void localCommandLineTestTool::initClient(bool quickExit, const std::string &ser
             fprintf(stderr,"init unix socket %s failed[%s]\n",path.c_str(),strerror(errno));
             return;
         }
-        AIMY_DEBUG("init client success ->%s:%hu",m_host.c_str(),m_port);
+        AIMY_DEBUG("init client success ->%s:%hu",m_host.c_str());
         return;
     }while(0);
 }
@@ -154,8 +154,10 @@ void localCommandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
     argc--;
     argv++;
     // parse host_name  host_port
-    std::string host_name=LINSTENADDR;
-    uint16_t host_port=LINSTENPORT;
+    std::string host_name=LOCAL_SERVICE_NAME;
+    uint32_t recv_cnt=1;
+    uint32_t timeout_msec=200;
+    bool keep_alive=false;
     bool isServer=false;
     while(argc>0)
     {
@@ -170,11 +172,26 @@ void localCommandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
                 argc--;
             }
         }
-        else if(opt=="--port")
-        {
+        else if (opt=="--cnt") {
             if(argc>0)
             {
-                host_port=std::stoul(*argv)&0xffff;
+                recv_cnt=std::stoul(*argv)&0xffffffff;
+                argv++;
+                argc--;
+            }
+        }
+        else if (opt=="--timeout") {
+            if(argc>0)
+            {
+                timeout_msec=std::stoul(*argv)&0xffffffff;
+                argv++;
+                argc--;
+            }
+        }
+        else if (opt=="--keepalive") {
+            if(argc>0)
+            {
+                keep_alive=std::stoul(*argv)!=0;
                 argv++;
                 argc--;
             }
@@ -213,9 +230,9 @@ void localCommandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
             break;
         }
     }
-    if(isServer)initServer(host_name,host_port);
+    if(isServer)initServer(host_name);
     else{
-        initClient(true,host_name,host_port);
+        initClient(keep_alive?false:true,host_name,recv_cnt,timeout_msec,keep_alive);
     }
 }
 bool localCommandLineTestTool::insertCallback(const std::string&name, const std::string &help_info, const ExternalFunction&func, uint32_t paramCount)
@@ -269,7 +286,8 @@ std::string localCommandLineTestTool::getHelpInfo(bool print_func_info,const std
                                             "                     命令行测试工具1.0                   \r\n"\
                                             "*******************************************************\r\n"\
                                             "Usage:\r\n"\
-                                            "\tproc_name [--host <host_name>][--port <host_port>]<command>\r\n"\
+                                            "\tproc_name [--host <host_name>][--cnt <client max recv cnts>]\r\n"
+                                            "[--timeout <client recv timeout msec>][--keepalive <0|1 >]<command>\r\n"\
                                             "command:\r\n"\
                                             "\thelp|--help|-h [0|1 [func_name]]\t获取帮助信息\r\n"\
                                             "\trun <func_name> [paramlist]\t运行相应的函数\r\n"\
@@ -349,13 +367,6 @@ ExternalParamList localCommandLineTestTool::parse(const ExternalParam&param)
         offset=start_pos;
     }
     parse_func(data_ptr,start_pos,total_len);
-    std::string parse_result;
-    for(auto i:ret)
-    {
-        if(!parse_result.empty())parse_result+=" ";
-        parse_result+=paramToString(i);
-    }
-    AIMY_INFO("parse_result:[%s]",parse_result.c_str());
     return ret;
 }
 
@@ -392,6 +403,13 @@ std::string localCommandLineTestTool::handleRequest(ExternalParam&param)
         if(iter==param_list.end()){
             return std::string("request parse failed, error:[no specified func name]");
         }
+        std::string parse_result;
+        for(auto i:param_list)
+        {
+            if(!parse_result.empty())parse_result+=" ";
+            parse_result+=paramToString(i);
+        }
+        AIMY_INFO("exec:[%s]",parse_result.c_str());
         std::string func_name=paramToString(*iter);
         ++iter;
         ExternalParamList funcParamList;
@@ -400,6 +418,9 @@ std::string localCommandLineTestTool::handleRequest(ExternalParam&param)
             funcParamList.push_back(*iter);
         }
         return invokeCallback(func_name,funcParamList).c_str();
+    }
+    else if (mode_name=="keepalive") {
+        return "";
     }
     else{
         return std::string(mode_name)+" not supported!";
@@ -434,6 +455,33 @@ void localCommandLineTestTool::waitDone()
     }
 }
 
+void localCommandLineTestTool::multicastMessage(const std::string &message)
+{
+    std::lock_guard<std::mutex>locker(m_multicastMutex);
+    auto iter=m_addrDict.begin();
+    timeval now;
+    gettimeofday(&now,nullptr);
+    while(iter!=m_addrDict.end())
+    {
+        auto time_old=iter->second;
+        auto time_diff=(now.tv_sec-time_old.tv_sec)*1000+(now.tv_usec-time_old.tv_usec)/1000;
+        if(time_diff>10000)//10s
+        {
+            iter=m_addrDict.erase(iter);
+            continue;
+        }
+        AIMY_DEBUG("send to %s %s",iter->first.c_str(),message.c_str());
+        auto ret=sock->send(message.c_str(),message.length(),iter->first);
+        if(ret>0)
+        {
+            ++iter;
+        }
+        else {
+            iter=m_addrDict.erase(iter);
+        }
+    }
+}
+
 void localCommandLineTestTool::defaultServerInit()
 {
     insertCallback("echo","str print",[](const ExternalParamList&paramlist){
@@ -447,6 +495,33 @@ void localCommandLineTestTool::defaultServerInit()
     },1);
 }
 
+void localCommandLineTestTool::processClientResponse()
+{
+    uint32_t buf_size=32*1024;
+    char buf[buf_size];
+    //wait answer
+    while(1)
+    {
+        memset(buf,0,buf_size);
+        auto recv_len=sock->recv(buf,buf_size,m_recvWaitMsec);
+        if(recv_len>0)
+        {
+            uint32_t slice_size=4000;
+            uint32_t debug_size=0;
+            for(uint32_t offset=0;offset<recv_len;offset+=debug_size)
+            {
+                debug_size=recv_len-offset;
+                if(debug_size>slice_size)debug_size=slice_size;
+                AIMY_DEBUG("%s",std::string(buf+offset,debug_size).c_str());
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+}
+
 void localCommandLineTestTool::loop()
 {
     if(m_socket_fd<=0)
@@ -458,58 +533,40 @@ void localCommandLineTestTool::loop()
     {
         if(m_isserver)
         {
-            if(!serverTask2())break;
+            if(!serverTask())break;
         }
         else {
-            if(!clientTask2())break;
+            if(!clientTask()){
+                uint32_t recv_cnt=m_maxRecvCnt;
+                while((m_maxRecvCnt==0)||recv_cnt>0)
+                {
+                    recv_cnt--;
+                    processClientResponse();
+                }
+                break;
+            }
         }
     }
     m_threadRunning.exchange(false);
 }
 
-bool localCommandLineTestTool::clientTask()
-{
-    std::unique_lock<std::mutex>locker(m_rawDataMutex);
-    if(m_clientDataList.empty())
-    {
-        if(m_quickExit)return false;
-        m_clientCv.notify_one();
-        m_clientCv.wait_for(locker,std::chrono::seconds(30));
-    }
-    if(m_clientDataList.empty())return false;
-    auto data=m_clientDataList.front();
-    m_clientDataList.pop_front();
-    locker.unlock();
-    auto size=write(m_socket_fd,data.first.get(),data.second);
-    if(size<0||static_cast<size_t>(size)!=data.second)
-    {
-        AIMY_DEBUG("write error[%s]",strerror(errno));
-        return false;
-    }
-    if(m_quickExit)
-    {
-        return true;
-    }
-    char recv_buf[32*1024];
-    memset(recv_buf,0,32*1024);
-    auto recv_len=read(m_socket_fd,recv_buf,32*1024);
-    if(recv_len<=0){
-        AIMY_DEBUG("recv error[%s]",strerror(errno));
-    }
-    else {
-        AIMY_DEBUG("%s",std::string(recv_buf,recv_len>1000?1000:recv_len).c_str());
-    }
-    return true;
-}
 
- bool localCommandLineTestTool::clientTask2()
+ bool localCommandLineTestTool::clientTask()
  {
      std::unique_lock<std::mutex>locker(m_rawDataMutex);
      if(m_clientDataList.empty())
      {
          if(m_quickExit)return false;
          m_clientCv.notify_one();
-         m_clientCv.wait_for(locker,std::chrono::seconds(30));
+         m_clientCv.wait_for(locker,std::chrono::seconds(5));
+         if(m_clientDataList.empty()&&m_keepAlive)
+         {
+             std::list<std::string>input;
+             input.push_back("keepalive");
+             locker.unlock();
+             appendClientData(input);
+             locker.lock();
+         }
      }
      if(m_clientDataList.empty())return false;
      auto data=m_clientDataList.front();
@@ -521,22 +578,13 @@ bool localCommandLineTestTool::clientTask()
      auto path=sock->get_local_path();
      memcpy(buf.get(),path.c_str(),path.size());
      memcpy(buf.get()+max_path_size,data.first.get(),data.second);
-     auto send_len=sock->send(buf.get(),max_path_size+data.second,LOCAL_SERVICE_NAME);
+     auto send_len=sock->send(buf.get(),max_path_size+data.second,m_host);
      if(static_cast<decltype (max_path_size+data.second)>(send_len)!=(max_path_size+data.second))
      {
          AIMY_DEBUG("send error[%s]",strerror(errno));
          return false;
      }
-     //wait answer
-     memset(buf.get(),0,buf_size);
-     auto recv_len=sock->recv(buf.get(),buf_size,100);
-     if(recv_len>0)
-     {
-         AIMY_WARNNING("%s",std::string(buf.get(),recv_len).c_str());
-     }
-     else {
-         AIMY_DEBUG("unix socket recv error[%s]",strerror(errno));
-     }
+     processClientResponse();
      return true;
  }
 
@@ -569,46 +617,8 @@ void localCommandLineTestTool::appendClientData(std::list<std::string>inputList)
     addTestCommand(data);
 }
 
-bool localCommandLineTestTool::serverTask()
-{
-    fd_set read_set;
-    FD_ZERO(&read_set);
-    FD_SET(m_socket_fd, &read_set);
-    timeval timeout;
-    timeout.tv_sec=10;
-    timeout.tv_usec=0;
-    auto ret=select(m_socket_fd+1,&read_set,nullptr,nullptr,&timeout);
-    if(ret<0)
-    {
-        AIMY_DEBUG("select error[%s]",strerror(errno));
-        return false;
-    }
-    if(ret==0)return true;
-    uint32_t buf_len=32*1024;
-    char recv_buf[buf_len];
-    memset(recv_buf,0,buf_len);
-    sockaddr_in addr;
-    memset(&addr,0,sizeof (addr));
-    socklen_t len=sizeof (socklen_t);
-    auto recv_len=recvfrom(m_socket_fd,recv_buf,buf_len,0,(struct sockaddr *)&addr,&len);
-    if(recv_len<=0){
-        AIMY_DEBUG("recv error[%s]",strerror(errno));
-        return false;
-    }
-    else {
-        ExternalParam param=createExternalParam(recv_len,recv_buf);
-        AIMY_DEBUG("recv from %s:%hu [%s]",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port),std::string(recv_buf,recv_len>1000?1000:recv_len).c_str());
-        auto ret=handleRequest(param);
-        if(!ret.empty())
-        {
-            AIMY_DEBUG("send to %s:%hu %s",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port),ret.c_str());
-            ::sendto(m_socket_fd,ret.c_str(),ret.size(),0,(struct sockaddr *)&addr,len);
-        }
-    }
-    return true;
-}
 
-bool localCommandLineTestTool::serverTask2()
+bool localCommandLineTestTool::serverTask()
 {
     uint32_t buf_len=32*1024;
     char recv_buf[buf_len];
@@ -623,12 +633,16 @@ bool localCommandLineTestTool::serverTask2()
     else if(recv_len>max_path_size){
         std::string source_path(recv_buf,max_path_size);
         ExternalParam param=createExternalParam(recv_len-max_path_size,recv_buf+max_path_size);
-        AIMY_DEBUG("recv from %s [%s]",source_path.c_str(),std::string(recv_buf+max_path_size,recv_len>(1000+max_path_size)?1000:recv_len-max_path_size).c_str());
+        {
+            std::lock_guard<std::mutex>locker(m_multicastMutex);
+            timeval now;
+            gettimeofday(&now,nullptr);
+            m_addrDict[source_path]=now;
+        }
         auto ret=handleRequest(param);
         if(!ret.empty())
         {
-            AIMY_DEBUG("send to %s %s",source_path.c_str(),ret.c_str());
-            sock->send(ret.c_str(),ret.length(),source_path);
+            multicastMessage(ret);
         }
     }
     return true;

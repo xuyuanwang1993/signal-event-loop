@@ -19,6 +19,7 @@ int main(int argc,char *argv[])
     (void)argv;
     aimy::AimyLogger::Instance().register_handle();
     aimy::AimyLogger::Instance().set_log_path("/userdata/aimy/logs/test","test");
+    aimy::AimyLogger::Instance().set_log_file_size(200*1024*1024);
     auto print_log=getenv("AIMY_DEBUG");
     if(print_log==nullptr||strcasecmp(print_log,"false")!=0)
     {
@@ -297,20 +298,20 @@ int can_test(int argc,char *argv[])
         }
         AIMY_WARNNING("notifyScreenTouchEvent %hu:%hu ->%02x press:%d release:%d",x_pos,y_pos,event,pressed_2,release_2);
     });
-    util.notifyCanDeviceErroForTest.connectFunc([&](){
-        AIMY_ERROR("restart can device!");
+//    util.notifyCanDeviceErroForTest.connectFunc([&](){
+//        AIMY_ERROR("restart can device!");
 
-        auto reset=getenv("AIMY_RESET_CAN");
-        if(reset==nullptr||strcasecmp(reset,"false")!=0)
-        {
-          fprintf(stderr,"you can export AIMY_RESET_CAN=true to enale reset can\r\n");
-        }
-        else {
-            fprintf(stderr,"reset can interface\r\n");
-            system("ip link set can0 down");
-            system("ip link set can0 up type can bitrate 200000 loopback off");
-        }
-    });
+//        auto reset=getenv("AIMY_RESET_CAN");
+//        if(reset==nullptr||strcasecmp(reset,"false")!=0)
+//        {
+//          fprintf(stderr,"you can export AIMY_RESET_CAN=true to enale reset can\r\n");
+//        }
+//        else {
+//            fprintf(stderr,"reset can interface\r\n");
+//            system("ip link set can0 down");
+//            system("ip link set can0 up type can bitrate 200000 loopback off");
+//        }
+//    });
     aimy::AimyLogger::Instance().register_exit_signal_func([&](){
         loop.stop();
         tool.stop();

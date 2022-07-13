@@ -18,11 +18,11 @@ int main(int argc,char *argv[])
 int discover_test(int argc,char *argv[])
 {
     if(argc<2){
-        printf("Usage:%s server/client\r\n",argv[0]);
+        printf("Usage(%s):%s server/client \r\n",__DATE__,argv[0]);
         printf("export IP_PREFIX=\"10.0.4\" to discover in 10.0.4.1~10.0.4.254\r\n");
         return -1;
     }
-    EventLoop loop(2);
+    EventLoop loop(1);
     aimy::AimyLogger::Instance().register_exit_signal_func([&](){
         loop.stop();
     });

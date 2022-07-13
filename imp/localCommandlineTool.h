@@ -11,8 +11,10 @@
 #include<condition_variable>
 #include<thread>
 #include<atomic>
+#include<set>
 #include "unix-socket-helper.h"
 #include "log/aimy-log.h"
+#define LOCAL_SERVICE_NAME "commandline_service"
 namespace aimy {
 namespace Local {
 using ExternalParam=std::pair<std::shared_ptr<uint8_t>,uint32_t>;
@@ -33,13 +35,13 @@ public:
      * @param serverHost
      * @param serverPort
      */
-    void initServer(const std::string &serverHost="127.0.0.1",uint16_t serverPort=8888);
+    void initServer(const std::string &serverHost=LOCAL_SERVICE_NAME);
     /**
      * @brief init_client 建立与服务器的连接
      * @param serverHost
      * @param serverPort
      */
-    void initClient(bool quickExit,const std::string &serverHost="127.0.0.1",uint16_t serverPort=8888);
+    void initClient(bool quickExit,const std::string &serverHost=LOCAL_SERVICE_NAME,uint32_t maxRecvCnt=1,uint32_t maxWaitMsec=200,bool keepAlive=false);
     /**
      * @brief addTestCommand 插入测试命令数据
      * @param data 数据列表
@@ -68,14 +70,14 @@ public:
     void start();
     void stop();
     void waitDone();
+    void multicastMessage(const std::string &message);
 protected:
     virtual void defaultServerInit();
 private :
     void loop();
+    void processClientResponse();
     bool clientTask();
-    bool clientTask2();
     bool serverTask();
-    bool serverTask2();
 private:
     std::string invokeCallback(const std::string&func_name,const ExternalParamList&params);
     std::string getInvokeCallbackInfo(const std::string &func_name=std::string());
@@ -86,17 +88,23 @@ private:
 private:
     bool m_isserver=false;
     bool m_quickExit=true;
+    bool m_keepAlive=false;
     std::map<std::string,testCallParam>m_callbackMaps;
     std::list<ExternalParam>m_clientDataList;
     std::mutex m_rawDataMutex;
     std::condition_variable m_clientCv;
     std::string m_host;
-    uint16_t m_port = 0;
     int m_socket_fd=-1;
     std::atomic<bool>m_threadRunning;
     std::mutex m_thread_mutex;
     std::thread *m_workThread=nullptr;
     std::shared_ptr<unix_dgram_socket>sock;
+    //client
+    uint32_t m_maxRecvCnt=1;
+    uint32_t m_recvWaitMsec=100;
+    //multicast
+    std::mutex m_multicastMutex;
+    std::map<std::string,struct timeval> m_addrDict;
 };
 }
 }

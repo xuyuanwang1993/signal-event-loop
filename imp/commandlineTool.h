@@ -9,6 +9,7 @@
 #include<condition_variable>
 #include<thread>
 #include<atomic>
+#include <netinet/in.h>
 #include "log/aimy-log.h"
 namespace aimy {
 using ExternalParam=std::pair<std::shared_ptr<uint8_t>,uint32_t>;
@@ -35,7 +36,7 @@ public:
      * @param serverHost
      * @param serverPort
      */
-    void initClient(bool quickExit,const std::string &serverHost="127.0.0.1",uint16_t serverPort=8888);
+    void initClient(bool quickExit,const std::string &serverHost="127.0.0.1",uint16_t serverPort=8888,uint32_t maxRecvCnt=1,uint32_t maxWaitMsec=2000,bool keepAlive=false);
     /**
      * @brief addTestCommand 插入测试命令数据
      * @param data 数据列表
@@ -65,10 +66,12 @@ public:
     void stop();
     void waitDone();
     static std::string paramToString(const ExternalParam&param);
+    void multicastMessage(const std::string &message);
 protected:
     virtual void defaultServerInit();
 private :
     void loop();
+    void processClientResponse();
     bool clientTask();
     bool serverTask();
 private:
@@ -81,6 +84,7 @@ private:
 private:
     bool m_isserver=false;
     bool m_quickExit=false;
+    bool m_keepAlive=false;
     std::map<std::string,testCallParam>m_callbackMaps;
     std::list<ExternalParam>m_clientDataList;
     std::mutex m_rawDataMutex;
@@ -91,6 +95,12 @@ private:
     std::atomic<bool>m_threadRunning;
     std::mutex m_thread_mutex;
     std::thread *m_workThread=nullptr;
+    //client
+    uint32_t m_maxRecvCnt=1;
+    uint32_t m_recvWaitMsec=100;
+    //multicast
+    std::mutex m_multicastMutex;
+    std::map<std::pair<std::string,uint16_t>,struct timeval> m_addrDict;
 };
 }
 #endif // COMMANDLINETOOL_H

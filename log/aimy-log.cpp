@@ -14,7 +14,9 @@
 #include<syscall.h>
 #include <sys/stat.h>
 #include<unistd.h>
+#ifndef __ANDROID__
 #include <execinfo.h>
+#endif
 #include<cxxabi.h>
 #include <sys/prctl.h>
 #include <dirent.h>
@@ -474,6 +476,7 @@ void AimyLogger::check_log_path()
 void AimyLogger::print_backtrace(int dumpSize)
 {
 #if defined(__linux) || defined(__linux__)
+#ifndef __ANDROID__
     //输出程序的绝对路径
     char buffer[4096];
     memset(buffer, 0, sizeof(buffer));
@@ -511,6 +514,7 @@ void AimyLogger::print_backtrace(int dumpSize)
         }
     }
     delete []DumpArray;
+#endif
 #endif
 }
 

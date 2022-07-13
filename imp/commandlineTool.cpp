@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/un.h>
+#include<sys/time.h>
 #define LINSTENADDR "0.0.0.0"
 #define LINSTENPORT 8888
 using namespace aimy;
@@ -131,11 +132,14 @@ void commandLineTestTool::initServer(const std::string &serverHost, uint16_t ser
     }while(0);
     if(m_socket_fd>0)::close(m_socket_fd);
 }
-void commandLineTestTool::initClient(bool quickExit, const std::string &serverHost, uint16_t serverPort)
+void commandLineTestTool::initClient(bool quickExit, const std::string &serverHost, uint16_t serverPort, uint32_t maxRecvCnt, uint32_t maxWaitMsec, bool keepAlive)
 {
     m_quickExit=quickExit;
     m_host=serverHost;
     m_port=serverPort;
+    m_maxRecvCnt=maxRecvCnt;
+    m_recvWaitMsec=maxWaitMsec;
+    m_keepAlive=keepAlive;
     do{
         m_socket_fd=::socket(AF_INET,SOCK_DGRAM,0);
         if(m_socket_fd<0)
@@ -151,6 +155,11 @@ void commandLineTestTool::initClient(bool quickExit, const std::string &serverHo
         struct timeval tv;
         tv.tv_sec = 2;
         tv.tv_usec = 0;
+        if(m_recvWaitMsec>0)
+        {
+            tv.tv_sec=m_recvWaitMsec/1000;
+            tv.tv_usec=(m_recvWaitMsec%1000)*1000;
+        }
         setsockopt(m_socket_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv, sizeof tv);
         setsockopt(m_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof tv);
         if(::connect(m_socket_fd, (struct sockaddr*)&addr, sizeof addr) <0)
@@ -183,6 +192,9 @@ void commandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
     // parse host_name  host_port
     std::string host_name=LINSTENADDR;
     uint16_t host_port=LINSTENPORT;
+    uint32_t recv_cnt=1;
+    uint32_t timeout_msec=200;
+    bool keep_alive=false;
     bool isServer=false;
     while(argc>0)
     {
@@ -202,6 +214,30 @@ void commandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
             if(argc>0)
             {
                 host_port=std::stoul(*argv)&0xffff;
+                argv++;
+                argc--;
+            }
+        }
+        else if (opt=="--cnt") {
+            if(argc>0)
+            {
+                recv_cnt=std::stoul(*argv)&0xffffffff;
+                argv++;
+                argc--;
+            }
+        }
+        else if (opt=="--timeout") {
+            if(argc>0)
+            {
+                timeout_msec=std::stoul(*argv)&0xffffffff;
+                argv++;
+                argc--;
+            }
+        }
+        else if (opt=="--keepalive") {
+            if(argc>0)
+            {
+                keep_alive=std::stoul(*argv)!=0;
                 argv++;
                 argc--;
             }
@@ -242,7 +278,7 @@ void commandLineTestTool::handleCommandlineCmd(int argc,char *argv[])
     }
     if(isServer)initServer(host_name,host_port);
     else{
-        initClient(true,host_name,host_port);
+        initClient(keep_alive?false:true,host_name,host_port,recv_cnt,timeout_msec,keep_alive);
     }
 }
 bool commandLineTestTool::insertCallback(const std::string&name, const std::string &help_info, const ExternalFunction&func, uint32_t paramCount)
@@ -296,7 +332,8 @@ std::string commandLineTestTool::getHelpInfo(bool print_func_info,const std::str
                                             "                     命令行测试工具1.0                   \r\n"\
                                             "*******************************************************\r\n"\
                                             "Usage:\r\n"\
-                                            "\tproc_name [--host <host_name>][--port <host_port>]<command>\r\n"\
+                                            "\tproc_name [--host <host_name>][--port <host_port>][--cnt <client max recv cnts>]\r\n"
+                                            "[--timeout <client recv timeout msec>][--keepalive <0|1 >]<command>\r\n"\
                                             "command:\r\n"\
                                             "\thelp|--help|-h [0|1 [func_name]]\t获取帮助信息\r\n"\
                                             "\trun <func_name> [paramlist]\t运行相应的函数\r\n"\
@@ -376,13 +413,6 @@ ExternalParamList commandLineTestTool::parse(const ExternalParam&param)
         offset=start_pos;
     }
     parse_func(data_ptr,start_pos,total_len);
-    std::string parse_result;
-    for(auto i:ret)
-    {
-        if(!parse_result.empty())parse_result+=" ";
-        parse_result+=paramToString(i);
-    }
-    AIMY_INFO("parse_result:[%s]",parse_result.c_str());
     return ret;
 }
 
@@ -390,6 +420,38 @@ std::string commandLineTestTool::paramToString(const ExternalParam&param)
 {
     if(param.second==0||!param.first.get())return std::string();
     return std::string(reinterpret_cast<const char *>(param.first.get()),param.second);
+}
+
+void commandLineTestTool::multicastMessage(const std::string &message)
+{
+    std::lock_guard<std::mutex>locker(m_multicastMutex);
+    auto iter=m_addrDict.begin();
+    timeval now;
+    gettimeofday(&now,nullptr);
+    while(iter!=m_addrDict.end())
+    {
+        auto time_old=iter->second;
+        auto time_diff=(now.tv_sec-time_old.tv_sec)*1000+(now.tv_usec-time_old.tv_usec)/1000;
+        if(time_diff>10000)//10s
+        {
+            iter=m_addrDict.erase(iter);
+            continue;
+        }
+        struct sockaddr_in addr;
+        bzero(&addr,sizeof (addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(iter->first.first.c_str());
+        addr.sin_port = htons(iter->first.second);
+        socklen_t len=sizeof (addr);
+        AIMY_DEBUG("send to %s:%hu %s",iter->first.first.c_str(),iter->first.second,message.c_str());
+        auto ret=::sendto(m_socket_fd,message.c_str(),message.size(),0,(struct sockaddr *)&addr,len);
+        if(ret<=0)
+        {
+            iter=m_addrDict.erase(iter);
+            continue;
+        }
+        ++iter;
+    }
 }
 
 std::string commandLineTestTool::handleRequest(ExternalParam&param)
@@ -419,6 +481,13 @@ std::string commandLineTestTool::handleRequest(ExternalParam&param)
         if(iter==param_list.end()){
             return std::string("request parse failed, error:[no specified func name]");
         }
+        std::string parse_result;
+        for(auto i:param_list)
+        {
+            if(!parse_result.empty())parse_result+=" ";
+            parse_result+=paramToString(i);
+        }
+        AIMY_INFO("exec:[%s]",parse_result.c_str());
         std::string func_name=paramToString(*iter);
         ++iter;
         ExternalParamList funcParamList;
@@ -427,6 +496,9 @@ std::string commandLineTestTool::handleRequest(ExternalParam&param)
             funcParamList.push_back(*iter);
         }
         return invokeCallback(func_name,funcParamList).c_str();
+    }
+    else if (mode_name=="keepalive") {
+        return "";
     }
     else{
         return std::string(mode_name)+" not supported!";
@@ -494,7 +566,15 @@ void commandLineTestTool::loop()
             if(!serverTask())break;
         }
         else {
-            if(!clientTask())break;
+            if(!clientTask()){
+                uint32_t recv_cnt=m_maxRecvCnt;
+                while((m_maxRecvCnt==0)||recv_cnt>0)
+                {
+                    recv_cnt--;
+                    processClientResponse();
+                }
+                break;
+            }
         }
     }
     m_threadRunning.exchange(false);
@@ -507,9 +587,19 @@ bool commandLineTestTool::clientTask()
     {
         if(m_quickExit)return false;
         m_clientCv.notify_one();
-        m_clientCv.wait_for(locker,std::chrono::seconds(30));
+        m_clientCv.wait_for(locker,std::chrono::seconds(5));
+        if(m_clientDataList.empty()&&m_keepAlive)
+        {
+            std::list<std::string>input;
+            input.push_back("keepalive");
+            locker.unlock();
+            appendClientData(input);
+            locker.lock();
+        }
     }
-    if(m_clientDataList.empty())return false;
+    if(m_clientDataList.empty()){
+        return false;
+    }
     auto data=m_clientDataList.front();
     m_clientDataList.pop_front();
     locker.unlock();
@@ -519,16 +609,33 @@ bool commandLineTestTool::clientTask()
         AIMY_ERROR("write error[%s]",strerror(errno));
         return false;
     }
-    char recv_buf[32*1024];
-    memset(recv_buf,0,32*1024);
-    auto recv_len=read(m_socket_fd,recv_buf,32*1024);
-    if(recv_len<=0){
-        AIMY_ERROR("recv error[%s]",strerror(errno));
-    }
-    else {
-        AIMY_DEBUG("%s",std::string(recv_buf,recv_len>1000?1000:recv_len).c_str());
-    }
+    processClientResponse();
     return true;
+}
+
+void commandLineTestTool::processClientResponse()
+{
+    char recv_buf[32*1024];
+    while(1)
+    {
+        memset(recv_buf,0,32*1024);
+        auto recv_len=read(m_socket_fd,recv_buf,32*1024);
+        if(recv_len<=0){
+            break;
+        }
+        else {
+            uint32_t slice_size=4000;
+            uint32_t debug_size=0;
+            for(uint32_t offset=0;offset<recv_len;offset+=debug_size)
+            {
+                debug_size=recv_len-offset;
+                if(debug_size>slice_size)debug_size=slice_size;
+                AIMY_DEBUG("%s",std::string(recv_buf+offset,debug_size).c_str());
+            }
+
+        }
+    }
+
 }
 
 void commandLineTestTool::appendClientData(std::list<std::string>inputList)
@@ -588,12 +695,18 @@ bool commandLineTestTool::serverTask()
     }
     else {
         ExternalParam param=createExternalParam(recv_len,recv_buf);
-        AIMY_DEBUG("recv from %s:%hu [%s]",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port),std::string(recv_buf,recv_len>1000?1000:recv_len).c_str());
+        std::string ip=inet_ntoa(addr.sin_addr);
+        uint16_t port=ntohs(addr.sin_port);
+        {
+            std::lock_guard<std::mutex>locker(m_multicastMutex);
+            struct timeval now;
+            gettimeofday(&now,nullptr);
+            m_addrDict[std::make_pair(ip,port)]=now;
+        }
         auto ret=handleRequest(param);
         if(!ret.empty())
         {
-            AIMY_DEBUG("send to %s:%hu %s",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port),ret.c_str());
-            ::sendto(m_socket_fd,ret.c_str(),ret.size(),0,(struct sockaddr *)&addr,len);
+            multicastMessage(ret);
         }
     }
     return true;

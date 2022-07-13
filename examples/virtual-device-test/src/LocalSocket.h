@@ -4,7 +4,7 @@
 #include <thread>
 #include <functional>
 
-#ifdef _XOPEN_SOURCE
+#if defined(__linux) || defined(__linux__)
 #	include <sys/socket.h>
 #	include <sys/un.h>
 #else

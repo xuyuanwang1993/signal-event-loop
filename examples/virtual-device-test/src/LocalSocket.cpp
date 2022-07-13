@@ -1,9 +1,10 @@
-#ifdef _XOPEN_SOURCE
+
 
 #include "LocalSocket.h"
 #include <unistd.h>
 #include <string.h>
-
+#include <stdio.h>
+#include<errno.h>
 namespace VirtualDevice
 {
 
@@ -75,5 +76,3 @@ LocalSocket::ThreadRead()
 }
 
 }//namespace VirtualDevice
-
-#endif//_XOPEN_SOURCE

@@ -1,6 +1,5 @@
 set(target virtual-device-test)
 set(example_resource main.cpp)
-add_definitions(-D_XOPEN_SOURCE)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src SOURCE_MACHINE_TEST)
 add_executable(${target} ${example_resource} ${SOURCE_MACHINE_TEST} )

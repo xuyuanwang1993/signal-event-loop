@@ -362,6 +362,11 @@ FOUND:
     const Information *p_info = (Information*)buffer;
     AIMY_DEBUG("version[%s->%s] product[%s->%s] date[%s->%s]",version.c_str(),p_info->version,product.c_str(),p_info->product,date.c_str(),p_info->date);
     if(product!=p_info->product){
+        auto force_update=getenv("FORCE_UPDATE");
+        if(force_update&&strcasecmp(force_update,"true")==0)
+        {
+            return 1;
+        }
         AIMY_ERROR("product not match!");
         return -1;
     }
@@ -382,6 +387,11 @@ int UpdateFileContext::checkEncryptFile(const std::string&version,const std::str
     if (fread(&dev_info, sizeof(dev_info), 1, fp) == 1) {
         AIMY_DEBUG("version[%s->%s] product[%s->%s] date[%s->%s]",version.c_str(),dev_info.version,product.c_str(),dev_info.product,date.c_str(),dev_info.date);
         if(product!=dev_info.product){
+            auto force_update=getenv("FORCE_UPDATE");
+            if(force_update&&strcasecmp(force_update,"true")==0)
+            {
+                return 1;
+            }
             AIMY_ERROR("product not match!");
             return -1;
         }
@@ -419,6 +429,11 @@ int UpdateFileContext::checkHexFile(const std::string&version,const std::string 
         return -1;
     }
     if(product!=dev_info.product){
+        auto force_update=getenv("FORCE_UPDATE");
+        if(force_update&&strcasecmp(force_update,"true")==0)
+        {
+            return 1;
+        }
         AIMY_ERROR("product not match!");
         return -1;
     }

@@ -112,7 +112,7 @@ void CanSerialProxy::on_recv()
         }
         AIMY_DEBUG("serial recv by[%s] [%s]->[%s]",proxySerialName.c_str(),std::string(reinterpret_cast<char *>(buf),ret).c_str(),printf_buf);
 #endif
-        if(ret<16||buf[0]!=0x41||buf[1]!=0x54)return;
+        if(ret<7||buf[0]!=0x41||buf[1]!=0x54)return;
         uint32_t data_len=ret;
         uint8_t *data_ptr=buf;
         // 2 AT + 4 can_id + 1 len + 0d 0a

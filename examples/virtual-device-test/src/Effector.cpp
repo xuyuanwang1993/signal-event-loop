@@ -1,7 +1,6 @@
 #include "VirtualDevice/Effector.h"
 #include "VirtualMachine/protocol_caller.h"
 #include "VirtualDevice/Machine.h"
-#include "VirtualDevice/cjson-interface.h"
 #include <memory>
 #include <string.h>
 #if defined(_WIN32) || defined(_WIN64)
@@ -96,22 +95,20 @@ Effector::SetSoundMode(unsigned sound_mode) const
 	return Machine::Get()->Write(p_stream, c_stream_length);
 }
 
-int 
+int
 Effector::SetTone(float boost,const std::string &path ) const
 {
-	do {
+    do {
         if(path.empty())break;
-		neb::CJsonObject object;
-		object.Add("boost",boost);
-		object.Add("path",path);
-		std::string data=object.ToString();
-		const size_t c_stream_length = sizeof(VDProtocol::Caller::Body)+ data.size();
-		VDProtocol::Caller::Body *p_stream = (decltype(p_stream))alloca(c_stream_length);
-		p_stream->command = VDProtocol::Caller::Command::EFFECTOR_GROUP_SET_TONE;
-		memcpy(p_stream->data,data.c_str(),data.size());
-		return Machine::Get()->Write(p_stream, c_stream_length);
-	} while (0);
-	return -1;
+        std::string data;
+        data+="{\"boost\":"+std::to_string(boost)+",\"path\":\""+path+"\"}";
+        const size_t c_stream_length = sizeof(VDProtocol::Caller::Body)+ data.size();
+        VDProtocol::Caller::Body *p_stream = (decltype(p_stream))alloca(c_stream_length);
+        p_stream->command = VDProtocol::Caller::Command::EFFECTOR_GROUP_SET_TONE;
+        memcpy(p_stream->data,data.c_str(),data.size());
+        return Machine::Get()->Write(p_stream, c_stream_length);
+    } while (0);
+    return -1;
 }
 
 bool

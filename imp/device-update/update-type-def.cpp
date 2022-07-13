@@ -2,6 +2,9 @@
 #include "log/aimy-log.h"
 #include<string.h>
 #include<stdlib.h>
+#if defined(__linux) || defined(__linux__)
+#	include <endian.h>
+#endif
 using namespace aimy;
 int HexFileContext::readData(uint32_t data_addr,void *buf,uint32_t max_read_len)
 {

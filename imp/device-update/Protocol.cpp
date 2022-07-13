@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stddef.h>
 #include "log/aimy-log.h"
-#if defined(_XOPEN_SOURCE)
+#if defined(__linux) || defined(__linux__)
 #	include <endian.h>
 #endif
 
