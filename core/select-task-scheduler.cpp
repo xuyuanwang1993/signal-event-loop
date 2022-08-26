@@ -3,9 +3,9 @@
 #include "platform.h"
 #include "log/aimy-log.h"
 using namespace aimy;
-std::shared_ptr<TaskScheduler> SelectTaskScheduler::create(int _id)
+std::shared_ptr<TaskScheduler> SelectTaskScheduler::create(int _id,const std::string &name)
 {
-    return std::shared_ptr<TaskScheduler>(new SelectTaskScheduler(_id));
+    return std::shared_ptr<TaskScheduler>(new SelectTaskScheduler(_id,name));
 }
 
 SelectTaskScheduler::~SelectTaskScheduler()
@@ -120,7 +120,7 @@ void SelectTaskScheduler::clearFd(SOCKET fd)
     FD_CLR(fd,&exception_sets);
 }
 
-SelectTaskScheduler::SelectTaskScheduler(int _id):TaskScheduler(std::string("SelectTaskScheduler ")+std::to_string(_id))
+SelectTaskScheduler::SelectTaskScheduler(int _id,const std::string &name):TaskScheduler(name.empty()?(std::string("select_")+std::to_string(_id)):name)
 {
     resetStatus();
 }

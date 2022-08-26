@@ -1,6 +1,8 @@
 #include "object.h"
-
 #include <limits>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#endif
 #ifdef DEBUG
  #pragma message("Object Debug")
 #else
@@ -354,6 +356,9 @@ void Athread::startThread()
     isExecing.exchange(true);
     std::lock_guard<std::mutex>locker(threadMutex);
     workThread.reset(new std::thread([this](){
+#if defined(__linux__)
+    prctl(PR_SET_NAME,threadName.c_str(), 0, 0, 0);
+#endif
         this->threadTask();
     }));
 }

@@ -52,8 +52,6 @@ class AimyLogger{
     const int WAIT_TIME=1000;//ms
     const int MAX_WRITE_ERROR_TRY=10;
     const unsigned long MAX_LOG_QUEUE_SIZE=100000;
-    const int MIN_LOG_CLEAR_DAYS_DIFF=3;//天数差值大于此值会被清理
-    const int MAX_LOG_CLEAR_DAYS_DIFF=1024;//天数差值大于此值会被忽略
 public:
     AimyLogger &operator=(const AimyLogger &) = delete;
     AimyLogger(const AimyLogger &) = delete;
@@ -78,13 +76,16 @@ public:
     void set_clear_flag(bool clear);
     /*设置单个文件最大大小*/
     void set_log_file_size(long size);
+    /**
+         * @brief set_max_log_file_cnts 设置日志文件最大数量
+         */
+    void set_max_log_file_cnts(int cnt);
     /*设置的回调函数*/
     void set_log_callback(const MAX_LOG_CACHE_CALLBACK &callback);
     /*标准输出开关*/
     void set_log_to_std(bool flag);
     /*获取当前本地时间*/
     static std::string get_time_str();
-    static std::string get_local_day();
     void register_handle();
     void unregister_handle();
     /**
@@ -103,6 +104,8 @@ public:
     }
     static AimyLogger*create(){return new AimyLogger;}
     static size_t getThreadId();
+    static bool setThreadName(const std::string &name);
+    static std::string getThreadName();
     static std::string formatHexToString(const void *input,uint32_t len,bool withSpace=true);
 private:
     AimyLogger();
@@ -113,8 +116,10 @@ private:
     inline bool append_to_file(const std::string & log_message);
     /*重置文件信息*/
     void reset_file();
-    /*检查log目录下log文件，超过日期的进行清除*/
-    void check_log_path();
+    /**
+         * @brief rename_file log写入完成，对其进行重新命名
+         */
+    void rename_file();
     /*log处理线程*/
     void run();
     std::unique_ptr<std::thread>m_thread;
@@ -124,8 +129,6 @@ private:
     std::atomic<bool> m_stop;
     /*文件写入指针*/
     FILE *m_fp;
-    /*上次写入的文件名*/
-    std::string m_last_filename;
     /*log目录*/
     std::string m_save_path;
     /*程序名*/
@@ -149,13 +152,9 @@ private:
     /*标准输出开关*/
     std::atomic_bool m_log_to_std;
     /**
-     * @brief m_log_file_cache_days log文件最大缓存天数
+     * @brief m_log_file_cache_max_cnts 日志文件最大数量
      */
-    int m_log_file_cache_days;
-    /**
-     * @brief m_log_file_cache_ignore_days log文件日期天数差值超过此值不处理
-     */
-    int m_log_file_cache_ignore_days;
+    uint32_t m_log_file_cache_max_cnts;
     //信号退出函数
     static std::function<void()>m_exit_func;
     //信号捕获次数，用于强制退出

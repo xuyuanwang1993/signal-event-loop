@@ -6,7 +6,7 @@ namespace aimy {
 class EventLoop
 {
 public:
-    EventLoop(uint32_t nThreads=0,uint32_t nThreadPoolSize=4);
+    EventLoop(uint32_t nThreads=1,uint32_t nThreadPoolSize=0);
     ~EventLoop();
     void start();
     void stop();

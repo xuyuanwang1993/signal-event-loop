@@ -5,7 +5,7 @@
 #include "log/aimy-log.h"
 using namespace aimy;
 EventLoop::EventLoop(uint32_t nThreads, uint32_t nThreadPoolSize):
-    threadPoolNotify(SelectTaskScheduler::create(-1)),threadPool(nullptr),threadPoolSize(nThreadPoolSize),index(0),running(false)
+    threadPoolNotify(SelectTaskScheduler::create(-1,"pool_notify")),threadPool(nullptr),threadPoolSize(nThreadPoolSize),index(0),running(false)
 {
     if(nThreads==0)nThreads=std::thread::hardware_concurrency();
     if(nThreads<1)nThreads=1;

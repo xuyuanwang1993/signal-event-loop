@@ -26,6 +26,8 @@ CanUtilSocket::CanUtilSocket(TaskScheduler *parent,uint32_t reinitThresholdMsec,
 CanUtilSocket::~CanUtilSocket()
 {
     reinitTimer->release();
+    sendTimeoutTimer->release();
+    recvTimeoutTimer->release();
     stopCan();
 }
 

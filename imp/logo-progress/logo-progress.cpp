@@ -31,8 +31,10 @@ void LogoProgress::Start()
     }
     running.exchange(true);
     renderThread=std::make_shared<std::thread>([this](){
+        AimyLogger::setThreadName("renderThread");
         this->renderTask();
     });
+
 }
 
 void LogoProgress::Release()

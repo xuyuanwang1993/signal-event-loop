@@ -69,7 +69,7 @@ std::shared_ptr<IoChannel> TaskScheduler::checkAndGetChannelByFd(SOCKET fd)
     return ret;
 }
 
-TaskScheduler::TaskScheduler(const std::string &name):taskDescription(name),wakeupPipe(new Pipe())
+TaskScheduler::TaskScheduler(const std::string &name):Athread(name),taskDescription(name),wakeupPipe(new Pipe())
 {
 
 #if defined(__linux) || defined(__linux__)

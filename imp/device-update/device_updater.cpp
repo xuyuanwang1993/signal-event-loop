@@ -758,6 +758,7 @@ void AimyUpdater::release()
         lastUpdateFrameLen=0;
     }
     workChannel.reset();
+    resendTimer->release();
 }
 
 void AimyUpdater::sendNormalData(const void *data,uint32_t data_len)

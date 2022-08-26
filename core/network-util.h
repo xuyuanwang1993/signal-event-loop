@@ -97,6 +97,8 @@ public:
     };
     /*获取网络状态*/
     static std::list<net_interface_info> readNetworkInfo();
+    /*设置TCP的keepalive*/
+    static bool set_tcp_keepalive(SOCKET sockfd,bool flag,uint32_t try_seconds=30,uint32_t max_tries=4,uint32_t try_interval=5);
 };
 }
 }

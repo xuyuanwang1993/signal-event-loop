@@ -120,4 +120,5 @@ void UdpEchoServer::on_timeout()
 UdpEchoServer::~UdpEchoServer()
 {
     if(fd>0)NETWORK_UTIL::close_socket(fd);
+    speedNotifyTimer->release();
 }

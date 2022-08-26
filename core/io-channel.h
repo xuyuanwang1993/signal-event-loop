@@ -46,6 +46,10 @@ public:
     bool isReading()const;
     bool isWriting()const;
     bool isNoneEvent()const;
+    /**
+     * @brief rleaseFd only call this when you want recycle fd
+     */
+    void rleaseFd();
     SOCKET getFd()const;
      ~IoChannel();
     /**
@@ -62,7 +66,7 @@ private:
     IoChannel(Object *parent,SOCKET _fd);
 private:
     std::atomic<int>events;
-    const SOCKET fd;
+    SOCKET fd;
     //
     friend class TaskScheduler;
     friend class EpolltTaskScheduler;

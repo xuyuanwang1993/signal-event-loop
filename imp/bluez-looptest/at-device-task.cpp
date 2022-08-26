@@ -160,6 +160,7 @@ void AtDeviceTask::on_find_mac_time_out()
 
 void AtDeviceTask::thread_task(int fd)
 {
+    AimyLogger::setThreadName("at_workThread");
     aserial_set_rts(fd,false);
     AIMY_DEBUG("work_thread start!");
     char buf[4096];

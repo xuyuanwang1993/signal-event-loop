@@ -1,6 +1,9 @@
 
 #include "thread-pool.h"
 #include<assert.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#endif
 namespace aimy {
 
 ThreadPool::ThreadPool(Object *_parent):parent(_parent)
@@ -20,8 +23,9 @@ int ThreadPool::count() const {
 void ThreadPool::spawn(int count) {
     std::unique_lock<std::mutex> lock(mWorkersMutex);
     mJoining = false;
-    while (count-- > 0)
-        mWorkers.emplace_back(std::bind(&ThreadPool::run, this));
+    while (count-- > 0){
+        mWorkers.emplace_back(std::bind(&ThreadPool::run, this,mWorkers.size()));
+    }
 }
 
 void ThreadPool::join() {
@@ -35,7 +39,10 @@ void ThreadPool::join() {
     mWorkers.clear();
 }
 
-void ThreadPool::run() {
+void ThreadPool::run(uint32_t index) {
+#if defined(__linux__)
+    prctl(PR_SET_NAME,(std::string("threadpool_")+std::to_string(index)).c_str(), 0, 0, 0);
+#endif
     while (runOne()) {
     }
 }

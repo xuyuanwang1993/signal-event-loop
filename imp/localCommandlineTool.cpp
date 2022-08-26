@@ -435,8 +435,10 @@ void localCommandLineTestTool::start()
     m_threadRunning.exchange(true);
     std::lock_guard<std::mutex>locker(m_thread_mutex);
     m_workThread=new std::thread([this](){
+        AimyLogger::setThreadName("l_workThread");
         loop();
     });
+
 }
 
 void localCommandLineTestTool::stop()

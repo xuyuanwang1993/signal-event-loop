@@ -162,7 +162,7 @@ public:
     int count() const;
     void spawn(int count = 1);
     void join();
-    void run();
+    void run(uint32_t index);
     bool runOne();
 
     template <typename _Callable, typename... _Args>

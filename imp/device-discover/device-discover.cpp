@@ -94,7 +94,7 @@ void DeviceDiscover::setUpdateTimerState(bool enable)
 
 DeviceDiscover::~DeviceDiscover()
 {
-
+    updateTimer->release();
     if(fd>0){
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr = inet_addr(multicastip.c_str());

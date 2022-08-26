@@ -10,6 +10,7 @@
 #include<features.h>
 #include<signal.h>
 #include<list>
+#include<map>
 #if defined(__linux) || defined(__linux__)
 #include<syscall.h>
 #include <sys/stat.h>
@@ -103,6 +104,9 @@ void signal_exit_func(int signal_num){
     case SIGTERM:
         std::cout<<"recv signal SIGTERM\r\n";
         break;
+    case SIGSTOP:
+            std::cout<<"recv signal SIGSTOP\r\n";
+            break;
     case SIGTSTP:
         std::cout<<"recv signal SIGTSTP\r\n";
         break;
@@ -143,26 +147,6 @@ std::string AimyLogger::get_time_str(){
     return stream.str();
 }
 
-std::string AimyLogger::get_local_day()
-{
-    static std::mutex time_mutex;
-    std::lock_guard<std::mutex>locker(time_mutex);
-    std::ostringstream stream;
-    auto now = std::chrono::system_clock::now();
-    time_t tt = std::chrono::system_clock::to_time_t(now);
-
-#if defined(WIN32) || defined(_WIN32)
-    struct tm tm;
-    localtime_s(&tm, &tt);
-    stream << std::put_time(&tm, "%F %T");
-#elif  defined(__linux) || defined(__linux__)
-    char buffer[200] = {0};
-    std::string timeString;
-    std::strftime(buffer, 200, "%F", std::localtime(&tt));
-    stream << buffer;
-#endif
-    return stream.str();
-}
 
 std::function<void()>AimyLogger::m_exit_func(nullptr);
 std::atomic_bool AimyLogger::m_signal_catch_flag(false);
@@ -174,6 +158,7 @@ void AimyLogger::register_exit_signal_func(std::function<void()>exit_func)
     signal(SIGABRT,signal_exit_func);
     signal(SIGQUIT,signal_exit_func);
     signal(SIGTERM,signal_exit_func);
+    signal(SIGSTOP,signal_exit_func);
     signal(SIGTSTP,signal_exit_func);
     signal(SIGSEGV,signal_exit_func);
     signal(SIGHUP,signal_exit_func);
@@ -195,10 +180,10 @@ void AimyLogger::log(int level,const char *file,const char *func,int line,const 
             std::string file_name=file;
             auto pos=file_name.find_last_of('/');
             if(pos!=std::string::npos)file_name.replace(0,pos,"...");
-            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu][%s][%s,%s,%d]",time_str.c_str(),thread_id,log_strings[level],file_name.c_str(),func,line);
+            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu %s][%s][%s,%s,%d]",time_str.c_str(),thread_id,getThreadName().c_str(),log_strings[level],file_name.c_str(),func,line);
         }
         else {
-            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu][%s]",time_str.c_str(),thread_id,log_strings[level]);
+            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu %s][%s]",time_str.c_str(),thread_id,getThreadName().c_str(),log_strings[level]);
         }
         va_list arg;
         va_start(arg, fmt);
@@ -248,13 +233,16 @@ bool AimyLogger::set_log_path(const std::string &path,const std::string &proname
     m_env_set=false;
     m_save_path=path;
     m_pro_name=proname;
-    check_log_path();
 #if defined(__linux) || defined(__linux__)
     if (m_save_path.empty()) {
         m_save_path = ".";
         m_save_path += DIR_DIVISION;
     }
-    else mkdir(m_save_path.c_str(), 0777);
+    else {
+           std::string cmd=" mkdir -p ";
+           cmd+=m_save_path;
+           system(cmd.c_str());
+       }
     if (access(m_save_path.c_str(), F_OK | W_OK) != -1)m_env_set = true;
 #elif defined(WIN32) || defined(_WIN32)
     m_env_set = true;
@@ -287,8 +275,17 @@ void AimyLogger::set_log_file_size(long size)
     if(m_max_file_size<MIN_LOG_FILE_SIZE)m_max_file_size=MIN_LOG_FILE_SIZE;
     else if(m_max_file_size>MAX_LOG_FILE_SIZE)m_max_file_size=MAX_LOG_FILE_SIZE;
 }
-AimyLogger::AimyLogger():m_registered(false),m_stop(false),m_fp(nullptr),m_last_filename(""),m_save_path(std::string(".")+DIR_DIVISION),m_env_set(false),m_level(MIN_LOG_LEVEL),m_clear_flag(false)\
-  ,m_max_file_size(MIN_LOG_FILE_SIZE),m_log_callback(nullptr),m_write_error_cnt(0),m_log_to_std(true),m_log_file_cache_days(MIN_LOG_CLEAR_DAYS_DIFF),m_log_file_cache_ignore_days(MAX_LOG_CLEAR_DAYS_DIFF)
+
+void AimyLogger::set_max_log_file_cnts(int cnt)
+{
+    std::lock_guard<std::mutex> locker(m_mutex);
+    if(cnt<0)cnt=0;
+    m_log_file_cache_max_cnts=cnt;
+}
+
+AimyLogger::AimyLogger():m_registered(false),m_stop(false),m_fp(nullptr),m_save_path(std::string(".")+DIR_DIVISION),m_env_set(false),m_level(MIN_LOG_LEVEL),m_clear_flag(false)\
+  ,m_max_file_size(MIN_LOG_FILE_SIZE),m_log_callback(nullptr),m_write_error_cnt(0),m_log_to_std(true),
+    m_log_file_cache_max_cnts(20)
 {
 
 }
@@ -299,6 +296,7 @@ void AimyLogger::register_handle()
         m_stop.exchange(false);
         std::unique_lock<std::mutex>locker(m_mutex);
         m_thread.reset(new std::thread(&AimyLogger::run,this));
+
     }
 }
 void AimyLogger::unregister_handle()
@@ -321,24 +319,25 @@ void AimyLogger::processReset()
 
 AimyLogger::~AimyLogger(){
     if(get_register_status())unregister_handle();
+    if(m_fp)
+        {
+            fflush(m_fp);
+            fclose(m_fp);
+            m_fp=nullptr;
+        }
 }
 bool AimyLogger::open_file()
 {
     if(!m_env_set||m_save_path.empty())return false;
-    auto time_string=get_local_day();
-    std::string file_name=m_save_path+DIR_DIVISION+time_string+"-"+m_pro_name+".log";
     do{
-        //check file_name;
-        if(file_name!=m_last_filename)
-        {
-            m_last_filename=file_name;
-            break;
-        }
         //check fp
         if(!m_fp)break;
         //check file_size
         auto len=ftell(m_fp);
-        if(len>m_max_file_size)break;
+        if(len>m_max_file_size){
+            rename_file();
+            break;
+        }
         return true;
     }while(0);
     if(m_fp){
@@ -346,7 +345,7 @@ bool AimyLogger::open_file()
         m_fp=nullptr;
     }
     if(m_clear_flag)reset_file();
-    check_log_path();
+    std::string file_name=m_save_path+DIR_DIVISION+m_pro_name+".log";
     m_fp=fopen(file_name.c_str(),"a+");
     //set close on exec
  #if defined(__linux) || defined(__linux__)
@@ -375,6 +374,7 @@ bool AimyLogger::append_to_file(const std::string & log_message)
     return ret;
 }
 void AimyLogger::run(){
+    setThreadName("aimy_log_thread");
     std::unique_lock<std::mutex> locker(m_mutex);
     while(!m_stop){
         if(m_log_buf.empty())m_conn.wait_for(locker,std::chrono::milliseconds(WAIT_TIME));
@@ -404,6 +404,78 @@ void AimyLogger::set_log_to_std(bool flag)
     m_log_to_std.exchange(flag);
 }
 
+void AimyLogger::rename_file()
+{
+   /*保留指定数量的日志文件 对日志文件进行重命名*/
+#if defined(__linux) || defined(__linux__)
+    std::map<uint32_t,std::string> log_files;
+    DIR *dir=nullptr;
+    std::string log_file_name=m_pro_name+".log";
+    do{
+        dir=opendir(m_save_path.c_str());
+        if(!dir)break;
+        struct dirent *ptr=nullptr;
+        while((ptr=readdir(dir))!=nullptr)
+        {
+            if(ptr->d_name[0]==0)continue;
+            if(ptr->d_type==DT_REG)
+            {
+               std::string temp(ptr->d_name);
+               if(temp==log_file_name)log_files.emplace(0,log_file_name);
+               else {
+                   if(temp.length()>512)continue;
+                   char pro_name[256]={0};
+                   uint32_t index=0;
+                   if(sscanf(temp.c_str(),"%[^_]_%u.log",pro_name,&index)!=2)continue;
+                   if(pro_name!=m_pro_name)continue;
+                   if(index>0)log_files.emplace(index,temp);
+               }
+            }
+        }
+    }while(0);
+    if(dir)closedir(dir);
+    uint32_t base_index=1;
+    uint32_t file_index=1;
+    uint32_t reserve_cnt=log_files.size();
+    if(m_log_file_cache_max_cnts>0)reserve_cnt=reserve_cnt>m_log_file_cache_max_cnts?m_log_file_cache_max_cnts:reserve_cnt;
+    //保存需要再一次重命名的项
+    std::list<std::pair<std::string,std::string>>rename_list;
+    while(!log_files.empty()&&reserve_cnt>0)
+    {
+
+        auto iter=log_files.begin();
+        std::string target_name=m_pro_name+"_"+std::to_string(file_index)+".log";
+        std::string new_name=iter->second;
+        if(base_index!=iter->first)
+        {
+
+            while(log_files.find(base_index)!=log_files.end())
+            {
+                ++base_index;
+            }
+            new_name=m_pro_name+"_"+std::to_string(base_index)+".log";
+            ::rename((m_save_path+DIR_DIVISION+iter->second).c_str(),(m_save_path+DIR_DIVISION+new_name).c_str());
+        }
+        if(target_name!=new_name)
+        {
+            rename_list.push_back(std::make_pair(new_name,target_name));
+        }
+        ++base_index;
+        --reserve_cnt;
+        ++file_index;
+        log_files.erase(iter);
+    }
+    for(auto i:log_files)
+    {
+        ::remove((m_save_path+DIR_DIVISION+i.second).c_str());
+    }
+    for(auto i :rename_list)
+    {
+        ::rename((m_save_path+DIR_DIVISION+i.first).c_str(),(m_save_path+DIR_DIVISION+i.second).c_str());
+    }
+#endif
+}
+
 void AimyLogger::reset_file(){
     if(m_fp){
         fclose(m_fp);
@@ -423,55 +495,6 @@ void AimyLogger::reset_file(){
     system(cmd.c_str());
 }
 
-void AimyLogger::check_log_path()
-{
-    auto get_day_func=[](const char *data)->int
-    {
-      char year[32];
-      char mon[32];
-      char day[32];
-      memset(year,0,32);
-      memset(mon,0,32);
-      memset(day,0,32);
-      int ret=0;
-      if(data&&sscanf(data,"%[^-]-%[^-]-%[^-]",year,mon,day)==3)
-      {
-          ret=std::stoi(year)*12*30+std::stoi(mon)*24+std::stoi(day);
-      }
-      return ret;
-    };
-
-#if defined(__linux) || defined(__linux__)
-    std::list<std::string>removeList;
-    auto local_day=get_day_func(get_local_day().c_str());
-    DIR *dir=nullptr;
-    do{
-        dir=opendir(m_save_path.c_str());
-        if(!dir)break;
-        struct dirent *ptr=nullptr;
-        while((ptr=readdir(dir))!=nullptr)
-        {
-            if(ptr->d_name[0]==0)continue;
-            if(ptr->d_type==DT_REG)
-            {
-                auto file_day=get_day_func(ptr->d_name);
-                auto day_diff=std::abs(local_day-file_day);
-                if(day_diff>m_log_file_cache_days&&day_diff<m_log_file_cache_ignore_days)
-                {
-                    removeList.push_back(m_save_path+"/"+ptr->d_name);
-                }
-            }
-        }
-    }while(0);
-    if(dir)closedir(dir);
-    for(auto i:removeList)
-    {
-        remove(i.c_str());
-    }
-#elif defined(WIN32) || defined(_WIN32)
-
-#endif
-}
 
 void AimyLogger::print_backtrace(int dumpSize)
 {
@@ -600,6 +623,30 @@ size_t AimyLogger::getThreadId()
 #else // Default to standard C++11 (other Unix)
     return static_cast<size_t>(std::hash<std::thread::id>()(std::this_thread::get_id()));
 #endif
+}
+
+bool AimyLogger::setThreadName(const std::string &name)
+{
+#if defined(__linux__)
+    auto ret=prctl(PR_SET_NAME,name.c_str(), 0, 0, 0);
+    return ret==0;
+#else
+    return false;
+#endif
+}
+
+std::string AimyLogger::getThreadName()
+{
+    char buffer[32];
+    memset(buffer,0,32);
+    auto ret=prctl(PR_GET_NAME,buffer);
+    if(ret==0)
+    {
+        return buffer;
+    }
+    else {
+        return "#unkonwn thread#";
+    }
 }
 
 std::string AimyLogger::formatHexToString(const void *input, uint32_t len, bool withSpace)

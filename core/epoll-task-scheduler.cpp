@@ -134,7 +134,7 @@ void EpolltTaskScheduler::update(int operation, SOCKET fd,int events)
 #endif
 }
 
-EpolltTaskScheduler::EpolltTaskScheduler(int _id):TaskScheduler(std::string("EpolltTaskScheduler ")+std::to_string(_id))
+EpolltTaskScheduler::EpolltTaskScheduler(int _id):TaskScheduler(std::string("epoll_")+std::to_string(_id))
 {
 
 }

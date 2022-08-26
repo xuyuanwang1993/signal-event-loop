@@ -47,7 +47,7 @@ protected:
     static uint8_t caculateCheckcode(const void *header,uint32_t header_len,const void * payload,uint32_t payload_len);
     static void encryptPayload(const void *mask,uint32_t mask_len,void *data,uint32_t data_len);
     //
-    virtual uint32_t minProtocalSize(){ return 16;}
+    uint32_t minProtocalSize() override { return 16;}
 };
 }
 #endif // PROTOCAL_STREAM_H

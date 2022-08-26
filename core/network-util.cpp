@@ -1,6 +1,9 @@
 #include "network-util.h"
 #include "platform.h"
 #include "log/aimy-log.h"
+#if defined(__linux) || defined(__linux__)
+#include <netinet/tcp.h>
+#endif
 using namespace aimy::util;
 SOCKET NetworkUtil::build_socket(NetworkUtil::SOCKET_TYPE type)
 {
@@ -343,4 +346,50 @@ std::list<NetworkUtil::net_interface_info> NetworkUtil::readNetworkInfo()
     }while (0);
 
     return ret;
+}
+
+bool NetworkUtil::set_tcp_keepalive(SOCKET sockfd,bool flag,uint32_t try_seconds,uint32_t max_tries,uint32_t try_interval)
+{
+    if(flag){
+#if defined(__WIN32__) || defined(_WIN32)
+        // How do we do this in Windows?  For now, just make this a no-op in Windows:
+#else
+        int const keepalive_enabled = 1;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void*)&keepalive_enabled, sizeof keepalive_enabled) < 0) {
+            return false;
+        }
+
+#ifdef TCP_KEEPIDLE
+        uint32_t  keepalive_time = try_seconds==0?180:try_seconds;
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, (void*)&keepalive_time, sizeof keepalive_time) < 0) {
+            return false;
+        }
+#endif
+
+#ifdef TCP_KEEPCNT
+        uint32_t  keepalive_count = max_tries==0?5:max_tries;
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, (void*)&keepalive_count, sizeof keepalive_count) < 0) {
+            return false;
+        }
+#endif
+
+#ifdef TCP_KEEPINTVL
+        uint32_t  keepalive_interval = try_interval==0?60:try_interval;
+        if (setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, (void*)&keepalive_interval, sizeof keepalive_interval) < 0) {
+            return false;
+        }
+#endif
+#endif
+        return true;
+    }else {
+#if defined(__WIN32__) || defined(_WIN32)
+        return true;
+#else
+        int const keepalive_enabled = 0;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void*)&keepalive_enabled, sizeof keepalive_enabled) < 0) {
+            return false;
+        }
+        return true;
+#endif
+    }
 }

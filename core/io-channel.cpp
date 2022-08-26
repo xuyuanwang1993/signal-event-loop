@@ -1,5 +1,6 @@
 #include "io-channel.h"
 #include "task-scheduler.h"
+#include "log/aimy-log.h"
 using namespace aimy;
 std::shared_ptr<IoChannel> IoChannel::create(Object *parent,SOCKET _fd)
 {
@@ -41,6 +42,11 @@ bool IoChannel::isNoneEvent()const
     return events==EVENT_NONE;
 }
 
+void IoChannel::rleaseFd()
+{
+    fd=INVALID_SOCKET;
+}
+
 SOCKET IoChannel::getFd()const
 {
     return fd;
@@ -72,6 +78,7 @@ void IoChannel::handleIoEvent(int _events)
 
 IoChannel::~IoChannel()
 {
+    AIMY_DEBUG("release channel %d",fd);
     stop();
 }
 
@@ -79,10 +86,8 @@ void IoChannel::sync()
 {
     if(!parent)return;
     invoke(Object::getCurrentThreadId(),[this](){
-        if(!parent)return ;
-        if(fd!=INVALID_SOCKET){
-            NETWORK_UTIL::make_noblocking(fd);
-        }
+        if(!parent||fd==INVALID_SOCKET)return ;
+        NETWORK_UTIL::make_noblocking(fd);
         TaskScheduler *scheduler=dynamic_cast<TaskScheduler *>(parent.load());
         if(scheduler)scheduler->updateChannel(shared_from_this());
     });
@@ -92,8 +97,8 @@ void IoChannel::stop()
 {
     if(!parent)return;
     invoke(Object::getCurrentThreadId(),[this](){
-        if(!parent)return ;
-        if(fd!=INVALID_SOCKET)NETWORK_UTIL::make_noblocking(fd);
+        if(!parent||fd==INVALID_SOCKET)return ;
+        NETWORK_UTIL::make_noblocking(fd);
         TaskScheduler *scheduler=dynamic_cast<TaskScheduler *>(parent.load());
         if(scheduler)scheduler->removeChannel(fd);
     });

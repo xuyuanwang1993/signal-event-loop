@@ -184,6 +184,7 @@ void BluetoothTest::on_setup()
         return;
     }
     std::thread recv_thread([=](){
+        AimyLogger::setThreadName("blue_recv_thread");
         char buf[7]={0};
         while(isrunning&&recv_cnt<2)
         {

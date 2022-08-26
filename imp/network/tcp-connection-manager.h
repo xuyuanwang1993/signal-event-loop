@@ -20,6 +20,12 @@ protected:
     virtual void on_write();
     virtual void on_close();
     virtual void on_error();
+private:
+    //signal handler
+    void hand_recv(){ on_recv();}
+    void hand_write(){ on_write();}
+    void hand_close(){ on_close();}
+    void hand_error(){ on_error();}
 protected:
     TaskScheduler *const scheduler;
     const SOCKET fd;

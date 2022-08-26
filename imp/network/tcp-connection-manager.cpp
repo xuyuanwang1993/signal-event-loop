@@ -5,10 +5,10 @@ TcpConnection::TcpConnection(TaskScheduler *_parent,SOCKET _fd):Object(_parent),
   ,fd(_fd),channel(nullptr),readCache(nullptr),writeCache(nullptr)
 {
     channel=scheduler->addChannel(fd);
-    channel->bytesReady.connect(this,std::bind(&TcpConnection::on_recv,this));
-    channel->writeReady.connect(this,std::bind(&TcpConnection::on_write,this));
-    channel->closeEvent.connect(this,std::bind(&TcpConnection::on_close,this));
-    channel->errorEvent.connect(this,std::bind(&TcpConnection::on_error,this));
+    channel->bytesReady.connect(this,std::bind(&TcpConnection::hand_recv,this));
+    channel->writeReady.connect(this,std::bind(&TcpConnection::hand_write,this));
+    channel->closeEvent.connect(this,std::bind(&TcpConnection::hand_close,this));
+    channel->errorEvent.connect(this,std::bind(&TcpConnection::hand_error,this));
 }
 
 TcpConnection::~TcpConnection()
@@ -99,12 +99,15 @@ void TcpConnection::on_write()
 void TcpConnection::on_close()
 {
     AIMY_ERROR("tcp connection closed,disconnect it! [%s]",strerror(NETWORK_UTIL::get_socket_error(fd)));
+    channel->stop();
     disconnected();
+
 }
 
 void TcpConnection::on_error()
 {
     AIMY_ERROR("tcp connection error,disconnect it! [%s]",strerror(NETWORK_UTIL::get_socket_error(fd)));
+    channel->stop();
     disconnected();
 }
 

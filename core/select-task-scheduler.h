@@ -4,7 +4,7 @@
 namespace aimy {
 class SelectTaskScheduler final:public TaskScheduler{
 public:
-    static std::shared_ptr<TaskScheduler>create(int _id);
+    static std::shared_ptr<TaskScheduler>create(int _id,const std::string &name="");
     ~SelectTaskScheduler();
 private:
     void updateChannel(const std::shared_ptr<IoChannel>&channel)override;
@@ -14,7 +14,7 @@ private:
     void resetStatus()override;
     void clearFd(SOCKET fd)override;
 private:
-    SelectTaskScheduler(int _id);
+    SelectTaskScheduler(int _id,const std::string &name);
 private:
     /**
      * @brief m_read_sets 读fd集合

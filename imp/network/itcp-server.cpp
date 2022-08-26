@@ -184,6 +184,7 @@ uint32_t ITcpServer::activeConnect(const std::string &host,const std::string &se
                         release_task(task);
                         auto cost_time=Timer::getTimeNow()-task->timestamp;
                         if(cost_time<0)cost_time=-1;
+                        NETWORK_UTIL::set_tcp_keepalive(task->fd,true);
                         notifyActiveConnection(task->fd,task->token,cost_time);
                     });
                     task->channel->errorEvent.connectFunc([task,this](){
@@ -252,6 +253,7 @@ void ITcpServer::on_accept(int fd)
     {
         AIMY_ERROR("[%s] accept failed![%s]",service_name.c_str(),strerror(platform::getErrno()));
     }
+    NETWORK_UTIL::set_tcp_keepalive(ret,true);
     notifyPassiveConnetion(ret);
 }
 
@@ -260,6 +262,7 @@ void ITcpServer::release_task(std::shared_ptr<ConnectionTask> task)
     task->timer->release();
     task->timer.reset();//avoid circular references
     task->channel->stop();
+    task->channel->rleaseFd();//recyle fd
     task->channel.reset();//avoid circular references
     connections_map.erase(task->fd);
     token_directory.erase(task->token);

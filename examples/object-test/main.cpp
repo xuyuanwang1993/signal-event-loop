@@ -1,6 +1,7 @@
 #include "log/aimy-log.h"
 #include "core/core-include.h"
 #include "third_party/json/cjson-interface.h"
+#include "imp/utils/common_utils.h"
 using namespace aimy;
 static int object_test(int argc,char *argv[]);
 static int loop_test(int argc,char *argv[]);
@@ -16,6 +17,15 @@ int main(int argc,char *argv[])
     atexit([](){
         aimy::AimyLogger::Instance().unregister_handle();
     });
+    if(!AIMY_UTILS::acquireSigleInstanceLcok())
+    {
+        AIMY_ERROR("is running exit!");
+        return -1;
+    }
+    while(1)
+    {
+        sleep(1);
+    }
     return  json_test(argc,argv);
     return  object_test2(argc,argv);
     //return object_test(argc,argv);

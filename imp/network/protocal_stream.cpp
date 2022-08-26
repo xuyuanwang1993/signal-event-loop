@@ -91,7 +91,6 @@ std::pair<std::shared_ptr<uint8_t>,uint32_t> ProtocalStream::encodeFrame(const s
 
         encryptPayload(ret_buf.get()+timestamp_offset,timestamp_len,ret_buf.get()+timestamp_offset+timestamp_len,data_len);
     }while(0);
-    decodeFrame(ret_buf.get(),ret_len);
     return {ret_buf,ret_len};
 }
 
