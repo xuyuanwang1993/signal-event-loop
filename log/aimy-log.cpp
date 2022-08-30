@@ -510,7 +510,8 @@ void AimyLogger::print_backtrace(int dumpSize)
     }
     time_t tSetTime;
     time(&tSetTime);
-    struct tm* ptm = localtime(&tSetTime);
+    struct tm tmp;
+    struct tm* ptm = localtime_r(&tSetTime,&tmp);
     //输出信息的时间
     memset(buffer, 0, sizeof(buffer));
     sprintf(buffer, "Dump Time: %d-%d-%d %d:%d:%d",

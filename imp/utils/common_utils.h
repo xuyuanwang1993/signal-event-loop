@@ -24,5 +24,10 @@ std::string readProcName(pid_t pid);
  * @brief genCheckCode 0x100=异或校验码和+code
  */
 uint8_t genCheckCode(const void *p_data, uint32_t length);
+/**
+ * @brief checkIsBuildDay 检查是否是当天构建
+ * @return
+ */
+bool checkIsBuildDay();
 }
 #endif // COMMON_UTILS_H

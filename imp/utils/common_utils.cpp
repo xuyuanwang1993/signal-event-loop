@@ -110,3 +110,21 @@ uint8_t AIMY_UTILS::genCheckCode(const void *p_data, uint32_t length)
         check_code ^= p_src[i];
     return check_code;
 }
+
+bool AIMY_UTILS::checkIsBuildDay()
+{
+    auto ptr=getenv("DAY_DEBUG");
+    if(ptr&&std::stoi(ptr)!=0)
+    {
+        std::string build_time=__DATE__;
+        auto now = std::chrono::system_clock::now();
+        time_t tt = std::chrono::system_clock::to_time_t(now);
+        char buf[512]={0};
+        struct tm tmp;
+        strftime(buf,512,"%b %d %Y",localtime_r(&tt,&tmp));
+        return build_time==buf;
+    }
+    else {
+        return false;
+    }
+}
