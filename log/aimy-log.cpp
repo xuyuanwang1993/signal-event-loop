@@ -137,7 +137,8 @@ std::string AimyLogger::get_time_str(){
 #elif  defined(__linux) || defined(__linux__)
     char buffer[200] = {0};
     std::string timeString;
-    std::strftime(buffer, 200, "%FT%H:%M:%S", std::localtime(&tt));
+    struct tm tmp;
+    std::strftime(buffer, 200, "%FT%H:%M:%S", localtime_r(&tt,&tmp));
     stream << buffer;
 #endif
     uint32_t msec=(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count()/10)%100000;
