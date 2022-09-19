@@ -112,7 +112,8 @@ bool CanUtilSocket::sendFrameToSpecificPhysicalAddr(uint16_t physicalAddr, std::
 #endif
         if(len<=0)return false;
         frame.data_len=len+3;
-        frame.data.reset(new uint8_t[frame.data_len],std::default_delete<uint8_t[]>());
+        frame.data.reset(new uint8_t[frame.data_len+1],std::default_delete<uint8_t[]>());
+        memset(frame.data.get(),0,frame.data_len+1);
         auto data_ptr=frame.data.get();
         auto remoteCanId=physicalAddrToCanId(physicalAddr);
         data_ptr[0]=0X55;
@@ -161,9 +162,9 @@ std::pair<std::shared_ptr<uint8_t>,uint32_t>CanUtilSocket::convertHexstrToBytes(
     };
     uint32_t ret_len=(len+1)/2;
     if(ret_len==0)return {nullptr,0};
-    auto ptr=new uint8_t[ret_len];
+    auto ptr=new uint8_t[ret_len+1];
     std::shared_ptr<uint8_t> buf(ptr,std::default_delete<uint8_t[]>());
-    memset(ptr,0,ret_len);
+    memset(ptr,0,ret_len+1);
     const uint8_t *data_ptr=static_cast<const uint8_t *>(hexByteBuf);
     for(uint32_t index=0;index<ret_len;++index)
     {

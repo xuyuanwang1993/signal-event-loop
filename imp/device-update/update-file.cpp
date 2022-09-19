@@ -72,7 +72,6 @@ void UpdateFileContext::deInit()
         vecDataLen=0;
         codeData.reset();
         codeDataLen=0;
-        hexContext.reset();
     }
 }
 
@@ -84,7 +83,9 @@ bool UpdateFileContext::loadProgramData(uint32_t vec_start_offset,uint32_t vec_e
     codeDataLen=code_end_offset-code_start_offset;
     if(vecDataLen==0&&codeDataLen==0)return false;
     vecData.reset(new uint8_t[vecDataLen+1],std::default_delete<uint8_t[]>());
+    memset(vecData.get(),0,vecDataLen+1);
     codeData.reset(new uint8_t[codeDataLen+1],std::default_delete<uint8_t[]>());
+    memset(codeData.get(),0,codeDataLen+1);
     bool ret=false;
     switch (type) {
     case AIMY_BIN_FILE:
@@ -130,7 +131,7 @@ bool UpdateFileContext::loadProgramData(uint32_t vec_start_offset,uint32_t vec_e
     {
         if(vecDataLen>0)
         {
-            auto read_len=hexContext.readData(vec_start_offset,vecData.get(),vecDataLen);
+            auto read_len=hexContext.readData(fp,vec_start_offset,vecData.get(),vecDataLen);
             if(read_len<=0)
             {
                 AIMY_ERROR("read hex file failed");
@@ -142,7 +143,7 @@ bool UpdateFileContext::loadProgramData(uint32_t vec_start_offset,uint32_t vec_e
         }
         if(codeDataLen>0)
         {
-            auto read_len=hexContext.readData(code_start_offset,codeData.get(),codeDataLen);
+            auto read_len=hexContext.readData(fp,code_start_offset,codeData.get(),codeDataLen);
             if(read_len<=0)
             {
                 AIMY_ERROR("read hex file failed");
@@ -219,7 +220,7 @@ bool UpdateFileContext::fillUpdateSliceContext(UpdateSliceContext &context)
         if(context.seq==-1&&context.type==UPDATE_VECTOR_SLICE)
         {
             context.type=UPDATE_CODE_SLICE;
-            context.seq=static_cast<int>(context.vector_map.size())-1;
+            context.seq=static_cast<int>(context.code_map.size())-1;
         }
         if(context.type==UPDATE_CODE_SLICE&&context.seq<0)
         {//finished
@@ -241,7 +242,6 @@ bool UpdateFileContext::fillUpdateSliceContext(UpdateSliceContext &context)
             break;
         }
         uint32_t index=offset_map->size()-1-context.seq;
-
         memcpy(context.data.get(),opt_data_ptr+(*offset_map)[index].first,(*offset_map)[index].second);
         //单片机那边要求数据四字节对齐
         if((*offset_map)[index].second&0x3)
@@ -408,40 +408,41 @@ int UpdateFileContext::checkEncryptFile(const std::string&version,const std::str
 
 int UpdateFileContext::checkHexFile(const std::string&version,const std::string &product,const std::string&date,uint32_t version_offset,uint32_t product_offset,uint32_t date_offset)
 {
-    if(hexContext.loadHexFile(fp))
+    fseek(fp,0,SEEK_SET);
+    auto force_update=getenv("FORCE_UPDATE");
+    bool n_force_update=false;
+    if(force_update&&strcasecmp(force_update,"true")==0)
     {
-        return -1;
+        n_force_update=true;
     }
     DeviceInfo dev_info;
-    if(hexContext.readData(version_offset,dev_info.version,AIMY_HEX_STRING_MAX_LEN)<=0)
+    uint32_t read_len=AIMY_HEX_STRING_MAX_LEN;
+    if(hexContext.readData(fp,version_offset,dev_info.version,read_len)<=0)
     {
-        AIMY_ERROR("hex read version failed!");
-        return -1;
+        AIMY_ERROR("hex read version %08x failed [%s->%s]!",version_offset,version.c_str(),dev_info.version);
+        if(!n_force_update)return -1;
     }
-    if(hexContext.readData(product_offset,dev_info.product,AIMY_HEX_STRING_MAX_LEN)<=0)
+    read_len=AIMY_HEX_STRING_MAX_LEN;
+    if(hexContext.readData(fp,product_offset,dev_info.product,read_len)<=0)
     {
-        AIMY_ERROR("hex read product failed!");
-        return -1;
+        AIMY_ERROR("hex read product %08x failed [%s->%s]!",product_offset,product.c_str(),dev_info.product);
+        if(!n_force_update)return -1;
     }
-    if(hexContext.readData(date_offset,dev_info.date,AIMY_HEX_STRING_MAX_LEN)<=0)
+    read_len=AIMY_HEX_STRING_MAX_LEN;
+    if(hexContext.readData(fp,date_offset,dev_info.date,read_len)<=0)
     {
-        AIMY_ERROR("hex read date failed!");
-        return -1;
+        AIMY_ERROR("hex read date %08x failed [%s->%s]!",date_offset,date.c_str(),dev_info.date);
+        if(!n_force_update)return -1;
     }
     if(product!=dev_info.product){
-        auto force_update=getenv("FORCE_UPDATE");
-        if(force_update&&strcasecmp(force_update,"true")==0)
-        {
-            return 1;
-        }
         AIMY_ERROR("product not match!");
-        return -1;
+        if(!n_force_update)return -1;
     }
     AIMY_DEBUG("version[%s->%s] product[%s->%s] date[%s->%s]",version.c_str(),dev_info.version,product.c_str(),dev_info.product,date.c_str(),dev_info.date);
     if(version==dev_info.version&&date==dev_info.date)
     {
         AIMY_WARNNING("the same version");
-        return 0;
+        if(!n_force_update)return 0;
     }
     return 1;
 }

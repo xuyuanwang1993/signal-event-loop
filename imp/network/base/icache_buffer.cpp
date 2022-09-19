@@ -18,7 +18,8 @@ ssize_t IcacheBufferBase::readFromFd ()
     if(!read_buffer)
     {
         read_buffer_size=protocal->getSliceSize();
-        read_buffer.reset(new uint8_t[read_buffer_size],std::default_delete<uint8_t[]>());
+        read_buffer.reset(new uint8_t[read_buffer_size+1],std::default_delete<uint8_t[]>());
+        memset(read_buffer.get(),0,read_buffer_size+1);
         if(!read_buffer)
         {
             AIMY_ERROR("malloc buffer failed!");
@@ -67,8 +68,8 @@ std::pair<std::shared_ptr<uint8_t>,uint32_t> IcacheBufferBase::popFrame()
         ret_len=frame_info.second;
         if(ret_len>0)
         {
-            ret_buf.reset(new uint8_t[ret_len],std::default_delete<uint8_t[]>());
-            memset(ret_buf.get(),0,ret_len);
+            ret_buf.reset(new uint8_t[ret_len+1],std::default_delete<uint8_t[]>());
+            memset(ret_buf.get(),0,ret_len+1);
             memcpy(ret_buf.get(),cache_buf.get()+frame_info.first,ret_len);
         }
         frame_cache_map.pop_front();

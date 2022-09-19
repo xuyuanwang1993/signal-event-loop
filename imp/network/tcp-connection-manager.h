@@ -13,6 +13,8 @@ public:
     TcpConnection(TaskScheduler *_parent,SOCKET _fd);
     virtual ~TcpConnection();
     SOCKET getFd()const { return  fd;}
+    std::string getPeerHostName() const { return peerHostName;}
+    uint16_t getPeerPort() const { return  peerPort;}
     virtual void setProtocal(std::shared_ptr<ProtocalBase>_protocal);
     virtual bool sendFrame(const void *frame, uint32_t frame_len);
 protected:
@@ -29,6 +31,8 @@ private:
 protected:
     TaskScheduler *const scheduler;
     const SOCKET fd;
+    const std::string peerHostName;
+    const uint16_t peerPort;
     std::shared_ptr<IoChannel> channel;
     std::shared_ptr<IcacheBufferBase> readCache;
     std::shared_ptr<IcacheBufferBase> writeCache;

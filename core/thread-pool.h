@@ -160,6 +160,7 @@ public:
     ThreadPool &operator=(ThreadPool &&) = delete;
 
     int count() const;
+    uint32_t taskCount() const;
     void spawn(int count = 1);
     void join();
     void run(uint32_t index);
@@ -175,6 +176,16 @@ public:
     {
         return schedule(clock_t::now() + delay, std::forward<_Callable>(f), std::forward<_Args>(args)...);
     }
+
+
+    template <typename _Callable, typename... _Args>
+    auto schedule(uint32_t priority, _Callable &&f, _Args &&...args) -> threadpool_ret_type<_Callable,_Args ...>
+    {
+        if(priority>10)priority=10;
+        auto time_point=clock_t::now()-std::chrono::hours(10)+std::chrono::hours(priority);
+        return schedule(time_point, std::forward<_Callable>(f), std::forward<_Args>(args)...);
+    }
+
 
     template <typename _Callable, typename... _Args>
     auto schedule(clock_t::time_point time, _Callable &&f, _Args &&...args) -> threadpool_ret_type<_Callable,_Args ...>

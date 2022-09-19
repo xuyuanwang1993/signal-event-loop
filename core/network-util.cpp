@@ -393,3 +393,36 @@ bool NetworkUtil::set_tcp_keepalive(SOCKET sockfd,bool flag,uint32_t try_seconds
 #endif
     }
 }
+
+bool NetworkUtil::set_tcp_nodelay(SOCKET sockfd,bool enabled)
+{
+#if defined(__linux) || defined(__linux__)
+#ifdef TCP_NODELAY
+    int option=enabled?1:0;
+    return  setsockopt(sockfd,IPPROTO_TCP,TCP_NODELAY,&option,sizeof (option));
+#endif
+#endif
+    return false;
+}
+
+bool NetworkUtil::set_tcp_quickack(SOCKET sockfd,bool enabled)
+{
+#if defined(__linux) || defined(__linux__)
+#ifdef TCP_QUICKACK
+    int option=enabled?1:0;
+    return  setsockopt(sockfd,IPPROTO_TCP,TCP_QUICKACK,&option,sizeof (option));
+#endif
+#endif
+    return false;
+}
+
+bool NetworkUtil::set_tcp_cork(SOCKET sockfd,bool enabled)
+{
+#if defined(__linux) || defined(__linux__)
+#ifdef TCP_CORK
+    int option=enabled?1:0;
+    return  setsockopt(sockfd,IPPROTO_TCP,TCP_CORK,&option,sizeof (option));
+#endif
+#endif
+    return false;
+}

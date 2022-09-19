@@ -48,6 +48,7 @@ struct UpdateSliceContext{
      UpdateSliceContext(uint32_t _max_slice_size):max_slice_size(_max_slice_size),data_len(0),type(UPDATE_VECTOR_SLICE),seq(-2),page_size(1024)
      {
          data.reset(new uint8_t[max_slice_size+1],std::default_delete<uint8_t[]>());
+         memset(data.get(),0,max_slice_size+1);
      };
 };
 //https://www.cnblogs.com/zhaoyanan/p/7838598.html
@@ -60,20 +61,8 @@ enum AimyHexRecordType{
     RECORD_TYPE_START_LINEAR_ADDR,//线性地址
 };
 
-#define AIMY_HEX_HIGH_MASK 0xFFFF0000
-#define AIMY_HEX_LOW_MASK 0xFFFF
-struct AimyHexCache{
-    const uint32_t base_addr;
-    uint8_t data_cache[AIMY_HEX_LOW_MASK+1];
-    uint8_t data_flag[AIMY_HEX_LOW_MASK+1];
-    AimyHexCache(uint32_t _base_addr):base_addr(_base_addr){
-        memset(data_cache,0,AIMY_HEX_LOW_MASK+1);
-        memset(data_flag,0,AIMY_HEX_LOW_MASK+1);
-    }
-};
-
 struct HexFileContext{
-    std::map<uint32_t,std::shared_ptr<AimyHexCache>>cache_map;
+
     /**
      * @brief readData
      * @param data_addr
@@ -81,14 +70,7 @@ struct HexFileContext{
      * @param max_read_len
      * @return <0 failed ,>=0 copy bytes
      */
-    int readData(uint32_t data_addr,void *buf,uint32_t max_read_len);
-    /**
-     * @brief loadHexFile parse a hex file
-     * @param fd
-     * @return false -> failed
-     */
-    bool loadHexFile(FILE *fp);
-    void reset();
+    int readData(FILE *fp, uint32_t data_addr, void *buf, uint32_t &max_read_len);
 };
 }
 #endif // UPDATETYPEDEF_H

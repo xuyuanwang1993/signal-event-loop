@@ -45,8 +45,8 @@ void EventLoop::start()
 void EventLoop::stop()
 {
     running.exchange(false);
-    threadPool->join();
-    threadPoolNotify->stopThread();
+    if(threadPool)threadPool->join();
+    if(threadPoolNotify)threadPoolNotify->stopThread();
     for(auto i:taskSchedulers)
     {
         i->stopThread();

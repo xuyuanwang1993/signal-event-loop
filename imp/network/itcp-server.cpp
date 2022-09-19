@@ -58,7 +58,7 @@ bool ITcpServer::startListen(uint32_t max_pending_size)
         }
         while(ptr)
         AIMY_BACKTRACE("");
-        freeaddrinfo(ptr);
+        freeaddrinfo(server_addr);
         return !server_channel_list.empty();
     });
 }

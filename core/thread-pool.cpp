@@ -20,6 +20,12 @@ int ThreadPool::count() const {
     return int(mWorkers.size());
 }
 
+uint32_t ThreadPool::taskCount() const
+{
+    std::lock_guard<std::mutex> lock(mTasksMutex);
+    return mTasks.size();
+}
+
 void ThreadPool::spawn(int count) {
     std::unique_lock<std::mutex> lock(mWorkersMutex);
     mJoining = false;

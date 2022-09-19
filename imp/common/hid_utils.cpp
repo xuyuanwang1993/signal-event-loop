@@ -13,7 +13,7 @@ int HidDevice::open(const std::string &_path)
     {
         AIMY_ERROR("open hid[%s] failed[%s]",_path.c_str(),strerror(errno));
     }
-    return hid>0;
+    return hid;
 }
 
 void HidDevice::close(int hid)

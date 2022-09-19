@@ -63,7 +63,7 @@ bool ChangelogFormatter::loadFile(const std::string &path)
         ret_flag=true;
         size_t max_len=4096;
         std::shared_ptr<char> buf(new char[max_len+1],std::default_delete<char[]>());
-        memset(buf.get(),0,4097);
+        memset(buf.get(),0,max_len+1);
         char *ptr=buf.get();
         ssize_t read_len=0;
         while((read_len=getline(&ptr,&max_len,fp))!=-1)

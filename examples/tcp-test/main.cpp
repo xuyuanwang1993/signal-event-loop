@@ -40,7 +40,7 @@ int tcp_test(int argc,char *argv[])
             AIMY_DEBUG("accept %d",fd);
             std::shared_ptr<TcpConnection>conn(new TcpConnection(t.get(),fd));
             manager.addConnection(conn);
-            conn->disconnected.connect(conn.get(),[&manager,fd](){
+            conn->disconnected.connect(&manager,[&manager,fd](){
                 manager.removeConnection(fd);
             });
             //此处禁止传递共享指针，应该传递原始指针或者弱引用
@@ -66,7 +66,7 @@ int tcp_test(int argc,char *argv[])
             AIMY_DEBUG("connect to %s %s %d token:%u %ld ms",host.c_str(),port.c_str(),fd,token,cost_ms);
             std::shared_ptr<TcpConnection>conn(new TcpConnection(t.get(),fd));
             manager.addConnection(conn);
-            conn->disconnected.connect(conn.get(),[&manager,fd](){
+            conn->disconnected.connect(&manager,[&manager,fd](){
                 manager.removeConnection(fd);
             });
             auto conn_ptr=conn.get();

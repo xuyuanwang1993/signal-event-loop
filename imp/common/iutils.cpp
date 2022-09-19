@@ -168,8 +168,9 @@ std::string Iutils::getSuffix(const std::string &input,const std::string &separa
 
 std::shared_ptr<uint8_t> Iutils::allocBuffer(uint32_t len)
 {
+    //分配时+1的目的时 避免对方将此buffer当成char类型处理，后面如果没有终止符会引起越界访问
     if(len==0)return nullptr;
-    std::shared_ptr<uint8_t> ret(new uint8_t[len],std::default_delete<uint8_t[]>());
-    if(ret.get())memset(ret.get(),0,len);
+    std::shared_ptr<uint8_t> ret(new uint8_t[len+1],std::default_delete<uint8_t[]>());
+    if(ret.get())memset(ret.get(),0,len+1);
     return ret;
 }

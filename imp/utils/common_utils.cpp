@@ -128,3 +128,42 @@ bool AIMY_UTILS::checkIsBuildDay()
         return false;
     }
 }
+
+std::list<std::list<std::string>> AIMY_UTILS::parserCommandConfigFile(const std::string &file_name)
+{
+    std::list<std::list<std::string>> result;
+    auto fp=fopen(file_name.c_str(),"r");
+    if(!fp){
+        AIMY_ERROR("open %s failed![%s]",file_name.c_str(),strerror(errno));
+        return result;
+    }
+    char *line=nullptr;
+    size_t len=0;
+    ssize_t read_len=-1;
+    auto check_func=[](char c)->bool
+    {
+        return c!=' '&&c!='\r'&&c!='\n'&&c!='\t';
+    };
+    while(1)
+    {
+        read_len=getline(&line,&len,fp);
+        if(read_len<=0)break;
+        //parse
+        std::list<std::string> line_str_list;
+        for(ssize_t i=0;i<read_len;++i)
+        {
+            if(!check_func(line[i]))continue;
+            ssize_t j=i+1;
+            while(j<read_len)
+            {
+                if(!check_func(line[j]))break;
+                ++j;
+            }
+            line_str_list.push_back(std::string(line+i,j-i));
+            i=j;
+        }
+        if(!line_str_list.empty())result.push_back(std::move(line_str_list));
+    }
+    fclose(fp);
+    return result;
+}

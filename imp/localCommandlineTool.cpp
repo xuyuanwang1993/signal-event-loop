@@ -575,8 +575,8 @@ void localCommandLineTestTool::loop()
      m_clientDataList.pop_front();
      locker.unlock();
      const static uint32_t buf_size=32*1024;
-     std::shared_ptr<char>buf(new char[buf_size],std::default_delete<char[]>());
-     memset(buf.get(),0,buf_size);
+     std::shared_ptr<char>buf(new char[buf_size+1],std::default_delete<char[]>());
+     memset(buf.get(),0,buf_size+1);
      auto path=sock->get_local_path();
      memcpy(buf.get(),path.c_str(),path.size());
      memcpy(buf.get()+max_path_size,data.first.get(),data.second);

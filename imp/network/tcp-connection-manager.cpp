@@ -2,7 +2,7 @@
 #include "imp/debugger/timer-escaper.h"
 using namespace aimy;
 TcpConnection::TcpConnection(TaskScheduler *_parent,SOCKET _fd):Object(_parent),disconnected(this),notifyFrame(this),scheduler(_parent)
-  ,fd(_fd),channel(nullptr),readCache(nullptr),writeCache(nullptr)
+  ,fd(_fd),peerHostName(NETWORK_UTIL::get_peer_ip(fd)),peerPort(NETWORK_UTIL::get_peer_port(fd)),channel(nullptr),readCache(nullptr),writeCache(nullptr)
 {
     channel=scheduler->addChannel(fd);
     channel->bytesReady.connect(this,std::bind(&TcpConnection::hand_recv,this));
@@ -13,9 +13,16 @@ TcpConnection::TcpConnection(TaskScheduler *_parent,SOCKET _fd):Object(_parent),
 
 TcpConnection::~TcpConnection()
 {
-    channel->stop();
-    channel.reset();
-    NETWORK_UTIL::close_socket(fd);
+    if(channel)
+    {
+        if(channel->getFd()!=INVALID_SOCKET)
+        {
+            channel->stop();
+            NETWORK_UTIL::close_socket(channel->getFd());
+
+        }
+        channel.reset();
+    }
     AIMY_WARNNING("release tcp connection %d",fd);
 }
 
@@ -36,7 +43,8 @@ bool TcpConnection::sendFrame(const void *frame,uint32_t frame_len)
 {
 
     if(frame_len==0)return true;
-    std::shared_ptr<uint8_t>frame_copy(new uint8_t[frame_len],std::default_delete<uint8_t[]>());
+    std::shared_ptr<uint8_t>frame_copy(new uint8_t[frame_len+1],std::default_delete<uint8_t[]>());
+    memset(frame_copy.get(),0,frame_len+1);
     memcpy(frame_copy.get(),frame,frame_len);
     return invoke(Object::getCurrentThreadId(),[=](){
 
@@ -138,8 +146,7 @@ bool TcpConnectionManager::addConnection(std::shared_ptr<TcpConnection>connectio
 
 void TcpConnectionManager::removeConnection(SOCKET fd)
 {
-    AIMY_DEBUG("try remove tcp connection %d",fd);
-    addTriggerEvent([=](){
+    invoke(Object::getCurrentThreadId(),[=](){
         auto iter=connetions.find(fd);
         if(iter!=connetions.end())
         {

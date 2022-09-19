@@ -25,8 +25,10 @@ int bluez_looptest(int argc,char *argv[])
     std::shared_ptr<AtDeviceTask>task( new AtDeviceTask(loop.getTaskScheduler().get()));
     std::shared_ptr<BluetoothTest>testTask(new BluetoothTest(loop.getTaskScheduler().get()));
     task->notifyMac.connect(testTask.get(),std::bind(&BluetoothTest::on_recv_mac,testTask.get(),std::placeholders::_1,std::placeholders::_2));
+    bool finished=false;
     testTask->finshTest.connectFunc([&](int ret){
         AIMY_WARNNING("finsh test ret[%d]",ret);
+        finished=true;
         _Exit(ret);
         std::thread t_exit([&](){
             AIMY_WARNNING("stop------1-----------");
@@ -55,6 +57,6 @@ int bluez_looptest(int argc,char *argv[])
         loop.stop();
         AIMY_WARNNING("stop------finish-----------");
     });
-    loop.waitStop();
+    while(!finished)sleep(1);
     return testTask->result();;
 }

@@ -38,7 +38,7 @@ if(COMPILE_SDL_MODE)
 else()
     MESSAGE(STATUS "not compile sdl module")
 endif()
-add_definitions(-DHID_ENCRYPT)
+#add_definitions(-DHID_ENCRYPT)
 
 macro(set_parent_values)
     set(SOURCES ${SOURCES} PARENT_SCOPE)

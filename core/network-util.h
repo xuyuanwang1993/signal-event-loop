@@ -99,6 +99,32 @@ public:
     static std::list<net_interface_info> readNetworkInfo();
     /*设置TCP的keepalive*/
     static bool set_tcp_keepalive(SOCKET sockfd,bool flag,uint32_t try_seconds=30,uint32_t max_tries=4,uint32_t try_interval=5);
+    /**
+     * @brief set_tcp_nodelay
+     * @param sockfd
+     * @return
+     * 设置TCP_NODELAY 选项，打开此选项时，小于mss的包也会立即发送，不打开时会使用nagle算法 在包大于mss或含有fin包时发送否则放入缓冲区
+开启此选项会降低带宽利用率，提高数据实时性
+     */
+    static bool set_tcp_nodelay(SOCKET sockfd,bool enabled);
+    /**
+     * @brief set_tcp_quickack
+     * @param sockfd
+     * @param enabled
+     * @return
+     * 设置TCP_QUICKACK 选项，打开此选项时，会立即发送包确认的ack，关闭此选项，会延迟发送确认ack，可使多个ack一起合并发送，最大延时默认是40ms，可配置
+开启此选项会降低带宽利用率，提高数据实时性
+     */
+    static bool set_tcp_quickack(SOCKET sockfd,bool enabled);
+    /**
+     * @brief set_tcp_cork
+     * @param sockfd
+     * @param enabled
+     * @return
+     * 设置TCP_CORK选项，打开此选项时，不会发送小于mss的包，若包小于mss将会超时发送 默认200ms
+开启此选项会提高带宽利用率，降低数据实时性
+     */
+    static bool set_tcp_cork(SOCKET sockfd,bool enabled);
 };
 }
 }

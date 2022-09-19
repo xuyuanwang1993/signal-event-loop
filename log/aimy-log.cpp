@@ -77,6 +77,50 @@ constexpr static int log_color[] = {
     FOREGROUND_BLUE,
 };
 #endif
+
+AimyLoggerBuffer::AimyLoggerBuffer(uint32_t reserver_size,LOG_LEVEL _level,const char * _file,const char * _func,int line):
+    level(_level),
+    file(_file),
+    func(_func),
+    line(line),
+    log_info(nullptr),
+    size(reserver_size),
+    fill_size(0)
+{
+    log_info.reset(new char[size+1],std::default_delete<char[]>());
+    log_info.get()[fill_size]=0;
+}
+
+AimyLoggerBuffer::~AimyLoggerBuffer()
+{
+
+}
+
+void AimyLoggerBuffer::append(uint32_t max_len,const char * fmt, ... )
+{
+    auto need_size=max_len+fill_size;
+    if(need_size>size)
+    {
+        auto new_size=size+(4096>max_len?4096:max_len);
+        std::shared_ptr<char> new_buf(new char[new_size+1],std::default_delete<char []>());
+        memcpy(new_buf.get(),log_info.get(),fill_size);
+        log_info=new_buf;
+        size=new_size;
+        log_info.get()[fill_size]=0;
+    }
+    va_list arg;
+    va_start(arg, fmt);
+    auto fill_len=vsnprintf(log_info.get() + fill_size, max_len+1, fmt, arg);
+    fill_size+=fill_len;
+    log_info.get()[fill_size]=0;
+    va_end(arg);
+}
+
+void AimyLoggerBuffer::print()
+{
+    AimyLogger::Instance().log(*this);
+}
+
 void signal_exit_func(int signal_num){
     //输出退出时调用栈
     aimy::AimyLogger::Instance().print_backtrace();
@@ -105,8 +149,8 @@ void signal_exit_func(int signal_num){
         std::cout<<"recv signal SIGTERM\r\n";
         break;
     case SIGSTOP:
-            std::cout<<"recv signal SIGSTOP\r\n";
-            break;
+        std::cout<<"recv signal SIGSTOP\r\n";
+        break;
     case SIGTSTP:
         std::cout<<"recv signal SIGTSTP\r\n";
         break;
@@ -222,8 +266,69 @@ void AimyLogger::log(int level,const char *file,const char *func,int line,const 
     if(!m_env_set)return;
     if(m_log_buf.size()<MAX_LOG_QUEUE_SIZE)m_log_buf.push(std::make_shared<std::string>(buf.get()));
     m_conn.notify_all();
-
 }
+
+
+void AimyLogger::log(const AimyLoggerBuffer & buffer)
+{
+    //小于最小打印等级的log不处理
+    if(buffer.level<m_level||buffer.level>LOG_BACKTRACE)return;
+    std::shared_ptr<char>buf(new char[MAX_LOG_MESSAGE_SIZE+1],std::default_delete<char[]>());
+    buf.get()[MAX_LOG_MESSAGE_SIZE]='\0';
+    int info_len=0;
+    {
+        auto time_str=get_time_str();
+        auto thread_id=getThreadId();
+        if(buffer.level>=LOG_WARNNING)
+        {
+            std::string file_name=buffer.file;
+            auto pos=file_name.find_last_of('/');
+            if(pos!=std::string::npos)file_name.replace(0,pos,"...");
+            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu %s][%s][%s,%s,%d]",time_str.c_str(),thread_id,getThreadName().c_str(),log_strings[buffer.level],file_name.c_str(),buffer.func.c_str(),buffer.line);
+        }
+        else {
+            info_len=snprintf(buf.get(),MAX_LOG_MESSAGE_SIZE,"[%s t-%lu %s][%s]",time_str.c_str(),thread_id,getThreadName().c_str(),log_strings[buffer.level]);
+        }
+#if defined(DEBUG)|| 1
+        if(m_log_to_std){
+            /*输出到标准输出*/
+#if defined(__linux) || defined(__linux__)
+            if(buffer.level<LOG_ERROR){
+                fprintf(stdout,"%s%s%s%s%s",log_color[buffer.level+1],buf.get(),buffer.log_info.get(),LINE_END,log_color[0]);
+            }
+            else fprintf(stderr,"%s%s%s%s%s",log_color[buffer.level+1],buf.get(),buffer.log_info.get(),LINE_END,log_color[0]);
+#elif defined(WIN32) || defined(_WIN32)
+            if (buffer.level < LOG_ERROR) {
+                HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+                SetConsoleTextAttribute(handle, log_color[level+1]);
+                fprintf(stdout, "%s%s%s",  buf.get(),buffer.log_info.get(), LINE_END);
+                SetConsoleTextAttribute(handle, FOREGROUND_INTENSITY|log_color[0]);
+            }
+            else {
+                HANDLE handle = GetStdHandle(STD_ERROR_HANDLE);
+                SetConsoleTextAttribute(handle, log_color[level+1]);
+                fprintf(stderr, "%s%s%s", buf.get(),buffer.log_info.get(), LINE_END);
+                SetConsoleTextAttribute(handle, log_color[0]);
+            }
+#endif
+        }
+#endif
+    }
+    if(!get_register_status())return;
+    if(m_log_callback)
+    {
+        m_log_callback(std::string(buf.get()+info_len));
+    }
+    std::unique_lock<std::mutex> locker(m_mutex);
+    if(!m_env_set)return;
+    if(m_log_buf.size()<MAX_LOG_QUEUE_SIZE){
+        auto log_str=std::make_shared<std::string>(buf.get());
+        log_str->append(buffer.log_info.get());
+        m_log_buf.push(log_str);
+    }
+    m_conn.notify_all();
+}
+
 bool AimyLogger::set_log_path(const std::string &path,const std::string &proname){
     std::lock_guard<std::mutex> locker(m_mutex);
     if(m_fp){
@@ -656,9 +761,9 @@ std::string AimyLogger::formatHexToString(const void *input, uint32_t len, bool 
     int byte_len=2;
     if(withSpace)byte_len=3;
     uint32_t max_len=len*byte_len+1;
-    std::shared_ptr<char>buf(new char [max_len],std::default_delete<char[]>());
+    std::shared_ptr<char>buf(new char [max_len+1],std::default_delete<char[]>());
     char * ptr=buf.get();
-    memset(buf.get(),0,max_len);
+    memset(buf.get(),0,max_len+1);
     uint32_t offset=0;
     const uint8_t *p_data=static_cast<const uint8_t *>(input);
     for(uint32_t i=0;i<len;++i)

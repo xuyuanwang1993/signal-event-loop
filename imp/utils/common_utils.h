@@ -1,11 +1,13 @@
 #ifndef COMMON_UTILS_H
 #define COMMON_UTILS_H
 #include<string>
+#include<list>
 #ifndef __ANDROID__
 #define DEFAUL_LOCK_FILE_PATH "/tmp"
 #else
 #define DEFAUL_LOCK_FILE_PATH "/mnt"
 #endif
+#define TEST_LOCAL_SOCKET_PATH DEFAUL_LOCK_FILE_PATH"/aam.virtual_device.caller.client_test"
 namespace AIMY_UTILS {
 /**
  * @brief acquireSigleInstanceLcok make your process run once
@@ -29,5 +31,11 @@ uint8_t genCheckCode(const void *p_data, uint32_t length);
  * @return
  */
 bool checkIsBuildDay();
+/**
+ * @brief parserCommandConfigFile 按换行空格对文件进行解析 清除首尾回车换行制表符空格
+ * @param file_name
+ * @return
+ */
+std::list<std::list<std::string>> parserCommandConfigFile(const std::string &file_name);
 }
 #endif // COMMON_UTILS_H

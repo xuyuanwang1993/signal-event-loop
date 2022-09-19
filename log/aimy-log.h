@@ -38,17 +38,31 @@ enum LOG_LEVEL{
     LOG_BACKTRACE,
 };
 using MAX_LOG_CACHE_CALLBACK=std::function<void (const std::string&)>;
+struct AimyLoggerBuffer{
+    const LOG_LEVEL level;
+    const std::string file;
+    const std::string func;
+    const int line;
+    std::shared_ptr<char> log_info;
+    uint32_t size;
+    uint32_t fill_size;
+    AimyLoggerBuffer(uint32_t reserver_size,LOG_LEVEL _level,const char * _file,const char * _func,int line);
+    ~AimyLoggerBuffer();
+    void append(uint32_t max_len,const char * fmt, ... );
+    void print();
+};
+
 class AimyLogger{
 #if defined(__linux) || defined(__linux__)
     const char LINE_END[2]={'\n','\0'};
 #elif defined(WIN32) || defined(_WIN32)
     const char LINE_END[3]={'\r','\n','\0'};
 #endif
-    const uint64_t MAX_LOG_MESSAGE_SIZE=4*1024-1;//4k
+    const uint64_t MAX_LOG_MESSAGE_SIZE=4096-1;//4k
     const LOG_LEVEL MIN_LOG_LEVEL=LOG_DEBUG;
     const LOG_LEVEL MAX_LOG_LEVEL=LOG_FATALERROR;
     const int64_t MAX_LOG_FILE_SIZE=2LL*1024LL*1024LL*1024LL;//2G
-    const int64_t MIN_LOG_FILE_SIZE=32*1024;//32K
+    const int64_t MIN_LOG_FILE_SIZE=32*1024;//32k
     const int WAIT_TIME=1000;//ms
     const int MAX_WRITE_ERROR_TRY=10;
     const unsigned long MAX_LOG_QUEUE_SIZE=100000;
@@ -68,6 +82,8 @@ public:
     static void register_exit_signal_func(std::function<void()>exit_func);
     /*log接口*/
     void log(int level,const char *file,const char *func,int line,const char *fmt,...);
+    /*log接口*/
+    void log(const AimyLoggerBuffer & buffer);
     /*设置log目录，当clear_flag 为true时 会清空原有log,目录无权限时会返回false*/
     bool set_log_path(const std::string &path,const std::string &proname);
     /*设置最小打印等级*/
@@ -182,7 +198,7 @@ private:
 #define AIMY_FATALERROR(fmt,...) aimy::AimyLogger::Instance().log(aimy::LOG_FATALERROR,__FILE__, __FUNCTION__,__LINE__, fmt, ##__VA_ARGS__)
 #define AIMY_MARK(fmt,...) aimy::AimyLogger::Instance().log(aimy::LOG_BREAK_POINT,__FILE__, __FUNCTION__,__LINE__, fmt, ##__VA_ARGS__)
 #define AIMY_BACKTRACE(fmt,...) aimy::AimyLogger::Instance().log(aimy::LOG_BACKTRACE,__FILE__, __FUNCTION__,__LINE__, fmt, ##__VA_ARGS__)
-
+#define AIMY_LOG_BUFFER(a,level,size)  aimy::AimyLoggerBuffer a(size,level,__FILE__,__FUNCTION__,__LINE__)
 #else
 #define AIMY_LOG(level,fmt,...)
 #define AIMY_DEBUG(fmt,...)

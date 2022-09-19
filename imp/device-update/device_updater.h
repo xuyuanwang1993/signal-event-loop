@@ -7,6 +7,11 @@
 #define AIMY_UPDATER_VERSION_TIME "2022-05-26"
 #define AIMY_UPDATER_VERSION_AUTHOR "xuyuanwang(469953258@qq.com)"
 namespace aimy {
+/*
+ * 武汉单片机升级处理
+ 1.如果系统工作在升级状态，超过60秒还没和PC联机，便将系统更新为升级失败状态，重启，并从备份区导出数据，每次PROGRAM 1KB的FLASH，LED1 TOGGLE一次。
+ 2.如果系统工作在升级状态，升级过程中遇到阻塞超过3分钟，便将系统更新为升级失败状态，重启，并从备份区导出数据，每次PROGRAM 1KB的FLASH，LED1 TOGGLE一次
+ */
 class AimyUpdater:public Object
 {
 public:
@@ -71,6 +76,7 @@ private:
     void on_send_timeout();
 //release
     void release();
+    void reload_upgrade_task();
 //send data
     void sendNormalData(const void *data,uint32_t data_len);
     void sendUpdateData(const void *data,uint32_t data_len);

@@ -51,8 +51,8 @@ std::pair<std::shared_ptr<uint8_t>,uint32_t> ProtocalStream::encodeFrame(const s
         }
         if(total_len>getMaxFrameSize())break;
         ret_len=total_len;
-        ret_buf.reset(new uint8_t[total_len],std::default_delete<uint8_t[]>());
-        memset(ret_buf.get(),0,total_len);
+        ret_buf.reset(new uint8_t[total_len+1],std::default_delete<uint8_t[]>());
+        memset(ret_buf.get(),0,total_len+1);
         uint32_t offset=0;
         auto iter=input_list.begin();
         uint32_t timestamp_offset=0;

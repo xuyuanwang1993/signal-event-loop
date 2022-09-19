@@ -155,8 +155,8 @@ struct canControlFrame{
 
     }
     canControlFrame(uint32_t capacity,uint32_t canId):default_capacity(capacity<MAX_CAN_PAYLOAD_SIZE*2?MAX_CAN_PAYLOAD_SIZE*2:capacity),data(nullptr),data_len(0){
-        data.reset(new uint8_t[default_capacity],std::default_delete<uint8_t[]>());
-        memset(data.get(),0,default_capacity);
+        data.reset(new uint8_t[default_capacity+1],std::default_delete<uint8_t[]>());
+        memset(data.get(),0,default_capacity+1);
         optionCanIdList.push_back(canId);
     }
 };
@@ -701,7 +701,8 @@ protected:
 #endif
         if(dataLen==0)return frame;
         frame.data_len=dataLen+8;
-        frame.data.reset(new uint8_t[frame.data_len],std::default_delete<uint8_t[]>());
+        frame.data.reset(new uint8_t[frame.data_len+1],std::default_delete<uint8_t[]>());
+        memset(frame.data.get(),0,frame.data_len+1);
         auto data_ptr=frame.data.get();
         data_ptr[0]=0X55;
         data_ptr[1]=0xAA;
@@ -785,7 +786,8 @@ protected:
             {
                 frame.data_len=frame_len;
                 frame.optionCanIdList.push_back(frameCache->optionCanIdList.back());
-                frame.data.reset(new uint8_t[frame_len],std::default_delete<uint8_t[]>());
+                frame.data.reset(new uint8_t[frame_len+1],std::default_delete<uint8_t[]>());
+                memset(frame.data.get(),0,frame_len+1);
                 memcpy(frame.data.get(),data_ptr+offset,frame_len);
             }
             else {

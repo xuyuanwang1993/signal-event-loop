@@ -16,6 +16,8 @@ AimyUpdater::AimyUpdater(TaskScheduler *parent):Object(parent),notifyQuitMessage
 AimyUpdater::~AimyUpdater()
 {
     release();
+    resendTimer->release();
+    resendTimer.reset();
 }
 
 bool AimyUpdater::init(const std::string &url)
@@ -25,15 +27,31 @@ bool AimyUpdater::init(const std::string &url)
         release();
         messageUrl=url;
         SOCKET fd=-1;
-        if(strstr(url.c_str(),"hidraw"))
+        if(strstr(url.c_str(),"hid:"))
         {//hid_device
-            usingSerial=false;
-            fd=HidDevice::open(url);
-            if(fd<0)
+            uint32_t vid=0;
+            uint32_t pid=0;
+            if(sscanf(url.c_str(),"hid:%04x:%04x",&vid,&pid)!=2)
             {
-                AIMY_ERROR("open %s failed!",url.c_str());
+                AIMY_ERROR("invalid hid url format %s,need match hid:%%04x:%%04x!",url.c_str());
                 return false;
             }
+            auto dev_list= HidDevice::hidFind(pid,vid);
+            if(dev_list.empty())
+            {
+                AIMY_ERROR("can't find hid %s!",url.c_str());
+                return false;
+            }
+
+            usingSerial=false;
+            auto dev_path=dev_list.front();
+            fd=HidDevice::open(dev_path);
+            if(fd<0)
+            {
+                AIMY_ERROR("open %s failed!",dev_path.c_str());
+                return false;
+            }
+            setenv("FORCE_UPDATE","true",1);
         }
         else {
             //use tty
@@ -288,9 +306,7 @@ void AimyUpdater::requestUploadSegment()
 
 void AimyUpdater::requestQuitUpgradeWorkMode(const std::string &message)
 {
-#ifdef DEBUG
     AIMY_BACKTRACE("%s->%s",__FUNCTION__,message.c_str());
-#endif
     quitMessage=message;
 #pragma pack(push, 1)
     struct {
@@ -301,7 +317,7 @@ void AimyUpdater::requestQuitUpgradeWorkMode(const std::string &message)
 
     content.command = UPGRADE_QUIT;
     content.status = quitStatus;
-    sendUpdateData(&content,sizeof (content));
+    sendNormalData(&content,sizeof (content));
 }
 
 void AimyUpdater::handleReplyQueryDevice(const void *data,uint32_t data_len,uint32_t address)
@@ -460,6 +476,7 @@ void AimyUpdater::handleReplyQuerySegmentInfomation(const void *data,uint32_t da
         return;
     }
     totalPackets=sliceContext->code_map.size()+sliceContext->vector_map.size();
+    AIMY_ERROR("totalPackets:%u %u %u",totalPackets,sliceContext->vector_map.size(),sliceContext->code_map.size());
     progressPackets=0;
     requestUploadSegment();
 }
@@ -495,12 +512,9 @@ void AimyUpdater::handleReplyUploadVectorTable(const void *data,uint32_t data_le
     uint16_t reply_packet_no = be16toh(p_reply->reply_packet_no);
     if(reply_packet_no!=(sliceContext->seq&0xffff))
     {
-        AIMY_WARNNING("repeat packet reply[%04x] now[%04x]",reply_packet_no,sliceContext->seq&0xffff);
+        //AIMY_WARNNING("repeat packet reply[%04x] now[%04x]",reply_packet_no,sliceContext->seq&0xffff);
         return;
     }
-#ifdef DEBUG
-    AIMY_DEBUG("vectable seq:%u",reply_packet_no);
-#endif
     switch (p_reply->status) {
     case ReplyUpgradeUploadSegment::SUCCESS:
         updateProgress();
@@ -517,6 +531,7 @@ void AimyUpdater::handleReplyUploadVectorTable(const void *data,uint32_t data_le
         on_send_timeout();
         break;
     default:
+        AIMY_ERROR("upgrade:status",p_reply->status);
         break;
     }
 }
@@ -552,12 +567,9 @@ void AimyUpdater::handleReplyUploadCodeSegment(const void *data,uint32_t data_le
     uint16_t reply_packet_no = be16toh(p_reply->reply_packet_no);
     if(reply_packet_no!=(sliceContext->seq&0xffff))
     {
-        AIMY_WARNNING("repeat packet reply[%04x] now[%04x]",reply_packet_no,sliceContext->seq&0xffff);
+        //AIMY_WARNNING("repeat packet reply[%04x] now[%04x]",reply_packet_no,sliceContext->seq&0xffff);
         return;
     }
-#ifdef DEBUG
-    AIMY_DEBUG("codesegment seq:%u",reply_packet_no); 
-#endif
     switch (p_reply->status) {
     case ReplyUpgradeUploadSegment::SUCCESS:
         updateProgress();
@@ -582,6 +594,7 @@ void AimyUpdater::handleReplyUploadCodeSegment(const void *data,uint32_t data_le
         on_send_timeout();
         break;
     default:
+        AIMY_ERROR("upgrade:status",p_reply->status);
         break;
     }
 }
@@ -631,9 +644,7 @@ void AimyUpdater::on_read()
             break;
         default:
             AIMY_ERROR("read %d failed [%s]",workChannel->getFd(),strerror(err));
-            quitMessage="connection disconnected";
-            release();
-            notifyQuitMessage(quitStatus,quitMessage);
+            reload_upgrade_task();
         }
     }
     else {
@@ -665,9 +676,7 @@ void AimyUpdater::on_write()
                 auto error=platform::getErrno();
                 if(error!=EAGAIN&&error!=EINTR)
                 {
-                    quitMessage="connection disconnected";
-                    release();
-                    notifyQuitMessage(quitStatus,quitMessage);
+                    reload_upgrade_task();
                     return;
                 }
             }
@@ -693,9 +702,7 @@ void AimyUpdater::on_write()
                 auto error=platform::getErrno();
                 if(error!=EAGAIN&&error!=EINTR)
                 {
-                    quitMessage="connection disconnected";
-                    release();
-                    notifyQuitMessage(quitStatus,quitMessage);
+                    reload_upgrade_task();
                     return;
                 }
             }
@@ -706,9 +713,7 @@ void AimyUpdater::on_write()
                 return;
             }
             else {
-#ifdef   DEBUG
                 AIMY_DEBUG("update send frame size %u data [%s]",ret,AimyLogger::formatHexToString(lastUpdateFrame.get(),lastUpdateFrameLen).c_str());
-#endif
                 resendTimer->start();
             }
         }
@@ -723,17 +728,13 @@ void AimyUpdater::on_write()
 void AimyUpdater::on_close()
 {
     AIMY_ERROR("AimyUpdater close");
-    quitMessage="connection disconnected";
-    release();
-    notifyQuitMessage(quitStatus,quitMessage);
+    reload_upgrade_task();
 }
 
 void AimyUpdater::on_error()
 {
     AIMY_ERROR("AimyUpdater error");
-    quitMessage="connection error";
-    release();
-    notifyQuitMessage(quitStatus,quitMessage);
+    reload_upgrade_task();
 }
 
 void AimyUpdater::on_send_timeout()
@@ -758,7 +759,34 @@ void AimyUpdater::release()
         lastUpdateFrameLen=0;
     }
     workChannel.reset();
-    resendTimer->release();
+}
+
+void AimyUpdater::reload_upgrade_task()
+{
+    if(updateDeviceAdress!=0)
+    {
+        int cnt=10;
+        bool success=false;
+        while(cnt-->0)
+        {
+            if(init(messageUrl))
+            {
+                startUpdate();
+                success=true;
+                break;
+            }
+            sleep(1);
+        }
+        if(!success)
+        {
+            quitMessage="connection disconnected";
+            release();
+            notifyQuitMessage(quitStatus,quitMessage);
+        }
+    }
+    else {
+        release();
+    }
 }
 
 void AimyUpdater::sendNormalData(const void *data,uint32_t data_len)
@@ -815,9 +843,9 @@ void AimyUpdater::updateProgress()
 {
     progressPackets++;
     if(progressPackets>totalPackets)progressPackets=totalPackets;
-    if(totalPackets>0&&((progressPackets%200==0)||progressPackets==totalPackets))
+    if(totalPackets>0&&((progressPackets%100==0)||progressPackets==totalPackets))
     {
-        notifyUpdateProgress(progressPackets*100/totalPackets);
+        notifyUpdateProgress(progressPackets*100.0/totalPackets);
     }
 }
 

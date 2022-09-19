@@ -16,7 +16,8 @@ ssize_t IcacheBufferUdp::readFromFd ()
     if(!read_buffer)
     {
         read_buffer_size=protocal->getSliceSize();
-        read_buffer.reset(new uint8_t[read_buffer_size],std::default_delete<uint8_t[]>());
+        read_buffer.reset(new uint8_t[read_buffer_size+1],std::default_delete<uint8_t[]>());
+        memset(read_buffer.get(),0,read_buffer_size);
         if(!read_buffer)
         {
             AIMY_ERROR("malloc buffer failed!");

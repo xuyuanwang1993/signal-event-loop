@@ -11,6 +11,7 @@
 #include "cjson-interface.h"
 #include <memory>
 #include<iostream>
+#include<cstring>
 namespace neb
 {
 
@@ -45,7 +46,8 @@ CJsonObject* CJsonObject::CreateInstance(const std::string& path)
             auto len = ftell(fp);
             if (len <= 0 || len > 2 * 1024 * 1024)break;
             if (fseek(fp, 0, SEEK_SET) != 0)break;
-            std::shared_ptr<char>buf(new char[len],std::default_delete<char[]>());
+            std::shared_ptr<char>buf(new char[len+1],std::default_delete<char[]>());
+            memset(buf.get(),0,len+1);
             auto read_len = fread(buf.get(), len, 1, fp);
             if (read_len == 0 && !feof(fp))break;
             ret->Parse(buf.get());

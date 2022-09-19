@@ -54,7 +54,7 @@ void print_help_info(char *argv[])
     fprintf(stderr,"------------------------------\r\n");
     fprintf(stderr,"update examples:\r\n");
     fprintf(stderr,"\t%s --update test.amva 96 /dev/ttyS3\t\r\n",argv[0]);
-    fprintf(stderr,"\t%s --update test.amva 96 /dev/hidraw3\t\r\n",argv[0]);
+    fprintf(stderr,"\t%s --update HAPPY.hex 160 hid:0483:5762\t ->format[hid:%%04x:%%04x]\r\n",argv[0]);
     fprintf(stderr,"------------------------------\r\n");
 }
 
@@ -113,6 +113,9 @@ int update_task(int argc,char *argv[])
     });
     if(option=="--update")
     {//update
+        timeout_timer->stop();
+        timeout_timer->setInterval(2*60*1000);
+        timeout_timer->start();
         if(param_list.size()!=3)
         {
             print_help_info(argv);
@@ -137,6 +140,8 @@ int update_task(int argc,char *argv[])
         });
         updater.notifyUpdateProgress.connectFunc([&](double progress){
             AIMY_DEBUG("update progress %lf%%",progress);
+            timeout_timer->stop();
+            timeout_timer->start();
             ret=0;
         });
         updater.startUpdate();
