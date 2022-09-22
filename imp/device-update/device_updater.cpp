@@ -126,9 +126,7 @@ void AimyUpdater::queryWorkMode()
 
 void AimyUpdater::handleDataCache()
 {
-#ifdef DEBUG
-    AIMY_BACKTRACE("recv data cache size[%u] data->[%s]",dataLen,AimyLogger::formatHexToString(readCache,dataLen).c_str());
-#endif
+    AIMY_DEBUG("recv data cache size[%u] data->[%s]",dataLen,AimyLogger::formatHexToString(readCache,dataLen).c_str());
     uint8_t *p_frame;
     uint32_t frame_length;
     unsigned address;
@@ -284,9 +282,7 @@ void AimyUpdater::requestQuerySegmentInfomation()
 
 void AimyUpdater::requestUploadSegment()
 {
-#ifdef DEBUG
-    AIMY_BACKTRACE("%s --%lu %lu %d",__FUNCTION__,sliceContext->vector_map.size(),sliceContext->code_map.size(),sliceContext->seq);
-#endif
+    AIMY_DEBUG("%s --%lu %lu %d",__FUNCTION__,sliceContext->vector_map.size(),sliceContext->code_map.size(),sliceContext->seq);
 #pragma pack(push, 1)
     struct {
         uint8_t command;
@@ -483,9 +479,7 @@ void AimyUpdater::handleReplyQuerySegmentInfomation(const void *data,uint32_t da
 
 void AimyUpdater::handleReplyUploadVectorTable(const void *data,uint32_t data_len,uint32_t address)
 {
-#ifdef DEBUG
     AIMY_DEBUG("recv upload vector table reply from [%08x]",address);
-#endif
     if(address!=updateDeviceAdress)return;
 #pragma pack (push, 1)
     struct ReplyUpgradeUploadSegment
@@ -538,9 +532,7 @@ void AimyUpdater::handleReplyUploadVectorTable(const void *data,uint32_t data_le
 
 void AimyUpdater::handleReplyUploadCodeSegment(const void *data,uint32_t data_len,uint32_t address)
 {
-#ifdef DEBUG
     AIMY_DEBUG("recv upload code segment reply from [%08x]",address);
-#endif
     if(address!=updateDeviceAdress)return;
 #pragma pack (push, 1)
     struct ReplyUpgradeUploadSegment

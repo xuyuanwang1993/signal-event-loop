@@ -20,7 +20,7 @@ private:
     std::string matchedName;
     std::shared_ptr<Timer>findMacTimer;
     std::unique_ptr<std::thread>workThread;
-    bool threadRunning;
+    std::atomic<bool> threadRunning;
 };
 }
 

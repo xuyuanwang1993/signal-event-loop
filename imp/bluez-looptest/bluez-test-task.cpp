@@ -106,7 +106,6 @@ void BluetoothTest::on_recv_mac(std::string mac,std::string pswd)
 
 void BluetoothTest::start()
 {
-
     timeoutTimer->start();
     isrunning.exchange(true);
     AIMY_INFO("start---------%d",isrunning.load());
@@ -139,7 +138,7 @@ bool BluetoothTest::initBluetoothConnection()
     system((std::string("rfcomm bind 100 ")+convertMac).c_str());
     usleep(500);
     system((std::string("rfcomm connect 100 ")+convertMac).c_str());
-    sleep(5);
+    sleep(1);
     return true;
 }
 

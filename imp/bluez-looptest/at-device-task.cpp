@@ -19,8 +19,10 @@ AtDeviceTask::AtDeviceTask(Object *parent):Object(parent),notifyMac(this),matchN
 
 AtDeviceTask::~AtDeviceTask()
 {
-    stop();
-    findMacTimer->release();
+    DefaultObjectHandler::instance().addObjectEvent([this](){
+        stop();
+        if(findMacTimer)findMacTimer->release();
+    });
 }
 
 void AtDeviceTask::start(const std::string &ttyDeviceMatchName)
@@ -44,7 +46,7 @@ void AtDeviceTask::stop()
         {
             findMacTimer->stop();
         }
-        threadRunning=false;
+        threadRunning.exchange(false);
         if(workThread)
         {
             workThread->join();
@@ -149,7 +151,7 @@ void AtDeviceTask::on_find_mac_time_out()
             break;
         }
         AIMY_MARK("find mac[%s] pswd[%s]",mac_str.c_str(),psword_str.c_str());
-        threadRunning=true;
+        threadRunning.exchange(true);
         workThread.reset(new std::thread(std::bind(&AtDeviceTask::thread_task,this,handle)));
         notifyMac(mac_str,psword_str);
         return;
@@ -187,7 +189,7 @@ void AtDeviceTask::thread_task(int fd)
             break;
         }
     }
-    threadRunning=false;
+    threadRunning.exchange(false);
     aserial_close(fd);
     AIMY_DEBUG("work_thread finished!");
 }

@@ -28,17 +28,20 @@ uint32_t ThreadPool::taskCount() const
 
 void ThreadPool::spawn(int count) {
     std::unique_lock<std::mutex> lock(mWorkersMutex);
-    mJoining = false;
+    mJoining.exchange(false);
     while (count-- > 0){
         mWorkers.emplace_back(std::bind(&ThreadPool::run, this,mWorkers.size()));
     }
 }
 
 void ThreadPool::join() {
-    std::unique_lock<std::mutex> lock(mWorkersMutex);
-    mJoining = true;
-    mCondition.notify_all();
-
+    if(mJoining)return;
+    mJoining.exchange(true);
+    {
+        std::lock_guard<std::mutex> lock(mTasksMutex);
+        mCondition.notify_all();
+    }
+    std::unique_lock<std::mutex> locker(mWorkersMutex);
     for (auto &w : mWorkers)
         w.join();
 

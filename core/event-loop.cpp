@@ -7,6 +7,8 @@ using namespace aimy;
 EventLoop::EventLoop(uint32_t nThreads, uint32_t nThreadPoolSize):
     threadPoolNotify(SelectTaskScheduler::create(-1,"pool_notify")),threadPool(nullptr),threadPoolSize(nThreadPoolSize),index(0),running(false)
 {
+    //init call
+    DefaultObjectHandler::instance();
     if(nThreads==0)nThreads=std::thread::hardware_concurrency();
     if(nThreads<1)nThreads=1;
     AIMY_DEBUG("eventloop init threads[%u %u]",nThreads,nThreadPoolSize);
@@ -27,12 +29,13 @@ EventLoop::~EventLoop()
 {
     AIMY_WARNNING("eventloop exit enter");
     stop();
-    taskSchedulers.clear();
+    join();
     AIMY_WARNNING("eventloop exit");
 }
 
 void EventLoop::start()
 {
+    if(working())return;
     running.exchange(true);
     for(auto i:taskSchedulers)
     {
@@ -44,14 +47,8 @@ void EventLoop::start()
 
 void EventLoop::stop()
 {
+    if(!working())return;
     running.exchange(false);
-    if(threadPool)threadPool->join();
-    if(threadPoolNotify)threadPoolNotify->stopThread();
-    for(auto i:taskSchedulers)
-    {
-        i->stopThread();
-    }
-    AIMY_MARK("stop finished");
     std::unique_lock<std::mutex>locker(stopMutex);
     stopCv.notify_all();
 }
@@ -61,6 +58,8 @@ void EventLoop::waitStop()
     if(!working())return;
     std::unique_lock<std::mutex>locker(stopMutex);
     stopCv.wait(locker);
+    locker.unlock();
+    join();
 }
 
 bool EventLoop::working() const
@@ -101,6 +100,19 @@ uint32_t EventLoop::getIndex()
     ++index;
     if(index>=taskSchedulers.size())index.exchange(0);
     return ret;
+}
+
+void EventLoop::join()
+{
+    AIMY_MARK("join started");
+    if(threadPool)threadPool->join();
+    if(threadPoolNotify)threadPoolNotify->stopThread();
+    for(auto i:taskSchedulers)
+    {
+        i->stopThread();
+    }
+    taskSchedulers.clear();
+    AIMY_MARK("join finished");
 }
 
 std::shared_ptr<TaskScheduler> EventLoop::getTaskScheduler()

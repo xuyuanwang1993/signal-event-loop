@@ -13,12 +13,14 @@ std::shared_ptr<IoChannel> TaskScheduler::addChannel(SOCKET fd)
 
 TaskScheduler::~TaskScheduler()
 {
-    releaseAllRef();
-    stopThread();
-    wakeupChannel.reset();
-    channelsMap.clear();
-    wakeupPipe->close();
-    wakeupPipe.reset();
+    DefaultObjectHandler::instance().addObjectEvent([this](){
+        releaseAllRef();
+        stopThread();
+        wakeupChannel.reset();
+        channelsMap.clear();
+        wakeupPipe->close();
+        wakeupPipe.reset();
+    });
 }
 
 void TaskScheduler::wakeup()

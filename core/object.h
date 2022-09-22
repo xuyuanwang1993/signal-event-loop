@@ -29,8 +29,10 @@ typedef uint32_t TimerId;
 using TriggerEvent=std::function<void()>;
 template <typename _Callable, typename... _Args>
 using invoke_result_t=typename std::result_of< _Callable( _Args...)>::type;
+template <typename RetT>
+class ObjectFuture;
 template <typename _Callable, typename... _Args>
-using invoke_future_t = std::future<invoke_result_t<_Callable,_Args ...>>;
+using invoke_future_t = std::shared_ptr<ObjectFuture<invoke_result_t<_Callable,_Args ...>>>;
 class TriggerEventQueueForObject
 {
 public:
@@ -68,6 +70,62 @@ private:
     mutable std::mutex mt;
     std::queue<TriggerEvent> cache;
 };
+class DefaultObjectHandler
+{
+public:
+    static DefaultObjectHandler& instance()
+    {
+        static DefaultObjectHandler s;
+        return s;
+    }
+    void addObjectEvent(const TriggerEvent &event)
+    {
+        return event();
+        std::lock_guard<std::mutex>locker(mt);
+        cache.push(std::move(event));
+        cv.notify_one();
+    }
+private:
+    void exec()
+    {
+        std::unique_lock<std::mutex>locker(mt);
+        while(is_running)
+        {
+            std::queue<TriggerEvent> execQueue;
+            {
+                if(!locker.owns_lock())locker.lock();
+                if(cache.empty())cv.wait_for(locker,std::chrono::milliseconds(100));
+                if(cache.empty())continue;
+                std::swap(execQueue,cache);
+                locker.unlock();
+            }
+            while(!execQueue.empty())
+            {
+                execQueue.front()();
+                execQueue.pop();
+            }
+        }
+
+    }
+    explicit DefaultObjectHandler():is_running(true)
+    {
+        workThread.reset(new std::thread([=](){
+            exec();
+        }));
+    }
+    ~DefaultObjectHandler()
+    {
+        is_running.exchange(false);
+        workThread->join();
+    }
+private:
+    mutable std::mutex mt;
+    std::condition_variable cv;
+    std::atomic<bool> is_running;
+    std::queue<TriggerEvent> cache;
+    std::unique_ptr<std::thread> workThread;
+};
+
 struct SignalInterface;
 class Object;
 template<typename... _Args>
@@ -96,6 +154,94 @@ struct SignalInterface{
     virtual void disconnectAll()=0;
     virtual ~SignalInterface(){}
 };
+class RawFutureInterface{
+public:
+    virtual ~RawFutureInterface(){
+
+    }
+    void run()
+    {
+            runFunction();
+    }
+
+    explicit RawFutureInterface(){
+        result_flag.test_and_set(std::memory_order_acquire);
+    }
+
+protected:
+
+    bool is_set()
+    {
+        return !result_flag.test_and_set(std::memory_order_acquire);
+    }
+
+    void set()
+    {
+        result_flag.clear(std::memory_order_release);
+    }
+
+    virtual void runFunction()=0;
+    std::mutex result_mutex;
+    std::condition_variable result_cv;
+    std::atomic_flag result_flag=ATOMIC_FLAG_INIT;
+};
+
+template <typename RetT>
+class ObjectFuture:public RawFutureInterface
+{
+public:
+    RetT result()
+    {
+        std::unique_lock<std::mutex> locker(result_mutex);
+        while(!is_set())
+        {
+            result_cv.wait_for(locker,std::chrono::milliseconds(1000));
+        }
+        return exec_result;
+    }
+    ObjectFuture(const std::function<RetT()>&task):runTask(task)
+    {
+
+    }
+protected:
+    void runFunction()override
+    {
+        exec_result=runTask();
+        std::lock_guard<std::mutex> locker(result_mutex);
+        set();
+        result_cv.notify_one();
+    }
+    const std::function<RetT()>runTask;
+    RetT exec_result;
+};
+//特例化void返回值的处理
+template <>
+class ObjectFuture<void>:public RawFutureInterface
+{
+public:
+    void result()
+    {
+        std::unique_lock<std::mutex> locker(result_mutex);
+        while(!is_set())
+        {
+            result_cv.wait_for(locker,std::chrono::milliseconds(1000));
+        }
+        return;
+    }
+    ObjectFuture(const std::function<void()>&task):runTask(task)
+    {
+
+    }
+protected:
+    void runFunction()override
+    {
+            runTask();
+            std::lock_guard<std::mutex> locker(result_mutex);
+            set();
+            result_cv.notify_one();
+    }
+    const std::function<void()>runTask;
+};
 class Timer;
 class Object
 {
@@ -109,49 +255,43 @@ public:
         if(threadId!=getThreadId())
         {
             auto ret=addSyncEvent(f,std::forward<_Args>(args)...);
-            ret.wait();
-            std::future<int> test_f;
-            return ret.get();
+            return ret->result();
         }
         else {
-            auto bound=std::bind(f,std::forward<_Args>(args) ...);
-            return bound();
+            using R=invoke_result_t<_Callable,_Args ...>;
+            std::shared_ptr<ObjectFuture<R>> objectFuture(new ObjectFuture<R>(std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...)));
+            DefaultObjectHandler::instance().addObjectEvent([objectFuture](){
+                objectFuture->run();
+            });
+            return objectFuture->result();
         }
     }
     template <typename _Callable, typename... _Args>
     auto addSyncEvent(_Callable &&f, _Args &&...args)  -> invoke_future_t<_Callable, _Args...>
     {
         using R=invoke_result_t<_Callable,_Args ...>;
-        auto bound = std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...);
-        auto task = std::make_shared<std::packaged_task<R()>>([bound]() {
-            try {
-                return bound();
-            } catch (const std::exception &e) {
-                /*run failed,print the exception string*/
-                //printf("%s\r\n",e.what());
-                throw;
-            }
-        });
-        std::future<R> result = task->get_future();
+        std::shared_ptr<ObjectFuture<R>> objectFuture(new ObjectFuture<R>(std::bind(std::forward<_Callable>(f), std::forward<_Args>(args)...)));
         do{
             if(execing())
             {
-                auto ret=addTriggerEvent([task](){
-                    (*task)();
+                auto ret=addTriggerEvent([objectFuture](){
+                    objectFuture->run();
                 });
                 if(ret){
                     break;
                 }
             }
-            (*task)();
+            DefaultObjectHandler::instance().addObjectEvent([objectFuture](){
+                objectFuture->run();
+            });
         }while(0);
-        return result;
+        return objectFuture;
     }
     std::shared_ptr<Timer>addTimer(int64_t interval);
     virtual bool addTriggerEvent(const TriggerEvent &event);
     size_t getThreadId()const;
     void setThreadId(size_t id);
-    void setParent(Object *_parent);
+    void releaseParent();
     virtual std::string description()const;
     bool execing()const{return isExecing.load()||threadId.load()!=0;}
 public:
@@ -190,6 +330,7 @@ private:
 protected:
     std::atomic<Object *>parent;
     std::atomic<size_t> threadId;
+    std::mutex subObjectMutex;
     std::set<Object *>childObjectSet;
     std::set<Object *>execSubObjectSet;
     std::shared_ptr<TriggerEventQueueForObject>triggerEventQueue;
@@ -331,7 +472,11 @@ public:
         });
     }
     Signal(Object *_object):signalObject(_object){}
-    ~Signal(){disconnectAll();}
+    ~Signal(){
+        DefaultObjectHandler::instance().addObjectEvent([this](){
+            disconnectAll();
+        });
+    }
 
 private:
     Object *const signalObject;

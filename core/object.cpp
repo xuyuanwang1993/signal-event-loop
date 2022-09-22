@@ -16,7 +16,9 @@ Object::Object(Object *_parent):parent(_parent),threadId(0),triggerEventQueue(ne
 
 Object::~Object()
 {
-    releaseAllRef();
+    DefaultObjectHandler::instance().addObjectEvent([this](){
+        releaseAllRef();
+    });
 }
 
 bool Object::addTriggerEvent(const TriggerEvent &event)
@@ -40,17 +42,17 @@ size_t Object::getThreadId()const
 void Object::setThreadId(size_t id)
 {
     threadId.exchange(id);
+    std::lock_guard<std::mutex>locker(subObjectMutex);
     for(auto i:childObjectSet)
     {
         i->setThreadId(id);
     }
+
 }
 
-void Object::setParent(Object *_parent)
+void Object::releaseParent()
 {
-    if(_parent==parent)return;
-    parent=_parent;
-    if(_parent)_parent->addChildRef(this);
+    parent=nullptr;
 }
 
 std::string Object::description()const
@@ -107,7 +109,10 @@ void Object::handleEvent(int events)
 void Object::handleChildEvent()
 {
     std::set<Object *>execSet;
-    std::swap(execSet,execSubObjectSet);
+    {
+        std::lock_guard<std::mutex>locker(subObjectMutex);
+        std::swap(execSet,execSubObjectSet);
+    }
     for(auto i:execSet)
     {
         i->handleEvent(0);
@@ -168,6 +173,7 @@ int64_t Object::getNextTimeOut()
     if(!triggerEventQueue->empty()){
         return 0;
     }
+    std::lock_guard<std::mutex>locker(subObjectMutex);
     if(timerEventsMap.empty()&&execSubObjectSet.empty())return -1;
     auto min_time_out=timerEventsMap.empty()?std::numeric_limits<int64_t>::max():(timerEventsMap.begin()->first.first-Timer::getTimeNow());
     if(min_time_out<=0){
@@ -188,17 +194,28 @@ int64_t Object::getNextTimeOut()
 
 void Object::releaseAllRef()
 {
-
-    disconnectAll();
-    isTriggering.exchange(false);
-    if(parent.load())parent.load()->removeChildRef(this);
-    parent=nullptr;
-    for(auto i:childObjectSet)
-    {
-        i->setParent(nullptr);
-    }
-    childObjectSet.clear();
-    execSubObjectSet.clear();
+    invoke(Object::getCurrentThreadId(),[=](){
+        disconnectAll();
+        isTriggering.exchange(false);
+        if(parent.load())parent.load()->removeChildRef(this);
+        parent=nullptr;
+        {
+            std::lock_guard<std::mutex>locker(subObjectMutex);
+            for(auto i:childObjectSet)
+            {
+                i->releaseParent();
+            }
+            childObjectSet.clear();
+            execSubObjectSet.clear();
+        }
+        timerEventsMap.clear();
+        //make timer invalid
+        for(auto i :timerMap)
+        {
+            i.second->setTimerId(INVALID_TIMER_ID);
+        }
+        timerMap.clear();
+    });
 }
 
 void Object::active()
@@ -286,6 +303,7 @@ void Object::addChildRef(Object *child)
     if(!child)return;
     invoke(Object::getCurrentThreadId(),[=](){
         child->setThreadId(getThreadId());
+        std::lock_guard<std::mutex>locker(subObjectMutex);
         childObjectSet.insert(child);
     });
 }
@@ -293,17 +311,20 @@ void Object::addChildRef(Object *child)
 void Object::removeChildRef(Object *child)
 {
     if(!child)return;
-    invoke(Object::getCurrentThreadId(),[=](){
-        childObjectSet.erase(child);
-        execSubObjectSet.erase(child);
-    });
+    std::lock_guard<std::mutex>locker(subObjectMutex);
+    childObjectSet.erase(child);
+    execSubObjectSet.erase(child);
+
 }
 
 void Object::pushExec(Object *execObj)
 {
     if(!execObj)return;
     invoke(Object::getCurrentThreadId(),[=](){
-        execSubObjectSet.insert(execObj);
+        {
+            std::lock_guard<std::mutex>locker(subObjectMutex);
+            execSubObjectSet.insert(execObj);
+        }
         //make sure the parent is active
         if(parent.load()&&!isTriggering)
         {
@@ -413,8 +434,6 @@ void Athread::threadTask()
     notifyThreadStatus.emit(ThreadFinished,description());
     setThreadId(0);
     isExecing.exchange(false);
-    //handle reserve events
-    handleEvent(0);
     notifyStop();
 }
 
@@ -460,16 +479,19 @@ bool Timer::working()const
 
 void Timer::stop()
 {
+    if(!Object::isValidTimerId(timerId))return;
     parent->stopTimer(timerId);
 }
 
 bool Timer::start()
 {
+    if(!Object::isValidTimerId(timerId))return false;
     return parent->startTimer(timerId);
 }
 
 void Timer::release()
 {
+    if(!Object::isValidTimerId(timerId))return;
     parent->releaseTimer(timerId);
 }
 

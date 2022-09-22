@@ -34,6 +34,7 @@ public:
         return threadPool;
     }
 private:
+    void join();
     uint32_t getIndex();
 private:
     std::vector<std::shared_ptr<TaskScheduler>>taskSchedulers;

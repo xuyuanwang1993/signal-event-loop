@@ -104,7 +104,6 @@ int HexFileContext::readData(FILE *fp,uint32_t data_addr,void *buf,uint32_t& max
             case RECORD_TYPE_DATA:{
                 if(!find_LINEAR_ADDR)break;
                 uint32_t data_start_addr=last_ex_linear_addr+offset_address;
-                AIMY_ERROR("%08X %08X",data_start_addr,start_addr);
                 uint32_t data_end_addr=data_start_addr+payload_len;
                 max_addr=data_end_addr>max_addr?data_end_addr:max_addr;
                 if(data_start_addr<start_addr)

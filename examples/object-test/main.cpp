@@ -4,6 +4,7 @@
 #include "imp/utils/common_utils.h"
 using namespace aimy;
 static int object_test(int argc,char *argv[]);
+static int quit_test(int argc,char *argv[]);
 static int loop_test(int argc,char *argv[]);
 static int object_test2(int argc ,char *argv[]);
 static int json_test(int argc ,char *argv[]);
@@ -17,20 +18,29 @@ int main(int argc,char *argv[])
     atexit([](){
         aimy::AimyLogger::Instance().unregister_handle();
     });
-    if(!AIMY_UTILS::acquireSigleInstanceLcok())
-    {
-        AIMY_ERROR("is running exit!");
-        return -1;
-    }
-    while(1)
-    {
-        sleep(1);
-    }
+    return quit_test(argc,argv);
     return  json_test(argc,argv);
     return  object_test2(argc,argv);
     //return object_test(argc,argv);
+
     return loop_test(argc,argv);
 }
+static int quit_test(int argc,char *argv[])
+{
+    EventLoop loop(2,1);
+    loop.start();
+    auto timer=loop.addTimer(1000);
+    timer->timeout.connectFunc([&](){
+        AIMY_INFO("STOP");
+        loop.stop();
+        AIMY_INFO("STOP over");
+    });
+    timer->start();
+    loop.waitStop();
+    return 0;
+}
+
+
 int object_test(int argc,char *argv[])
 {
     class test_loop:public Athread{
