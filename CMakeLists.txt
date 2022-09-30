@@ -11,6 +11,7 @@ set(target ${PROJECT_NAME})
 option(COMPILE_SDL_MODE "compile source relative to sdl" ON)
 option(ENABLE_SHARED "generate shared library" OFF)
 option(COMPILE_EXAMPLES "generate examples" ON)
+option(COMPILE_LUA_EXAMPLE "lua support" OFF)
 #option(ENABLE_STATIC "generate static library" ON)
 #配置输出及安装目录
 include(${CMAKE_CURRENT_SOURCE_DIR}/compile/common.cmake)

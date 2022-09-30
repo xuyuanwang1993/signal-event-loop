@@ -715,6 +715,8 @@ int main(int argc,char *argv[])
         int test_cnt=1;
         int target_cnt=1;
         bool scan_left=true;
+        uint64_t start_channel=1;
+        uint64_t end_channel=20;
         {
             //load config
             submodue.Get("interval",interval);
@@ -725,7 +727,11 @@ int main(int argc,char *argv[])
 
             submodue.Get("target_cnt",target_cnt);
             save_submodule.Add("target_cnt",target_cnt);
+            submodue.Get("start_channel",start_channel);
+            save_submodule.Add("start_channel",start_channel);
 
+            submodue.Get("end_channel",end_channel);
+            save_submodule.Add("end_channel",end_channel);
             submodue.Get("scan_left",scan_left);
             save_submodule.Add("scan_left",scan_left,scan_left);
 
@@ -738,6 +744,8 @@ int main(int argc,char *argv[])
         uint8_t data_send[]={0x0D,0x55,0xaa,control_bit,0x05,0x81,0xf3,0x10,0x01,0x96,0x02,0x00,0xa4,0x00};
         data_send[7]=0x10 |(scan_left?0x0:0x1);
         data_send[6]=dev_addr;
+        data_send[8]=start_channel;
+        data_send[9]=end_channel;
         uint32_t length=sizeof (data_send)-1;
         const uint8_t *p_src = data_send;
         uint8_t check_code = 0;
