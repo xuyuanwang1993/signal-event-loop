@@ -11,7 +11,7 @@ set(target ${PROJECT_NAME})
 option(COMPILE_SDL_MODE "compile source relative to sdl" ON)
 option(ENABLE_SHARED "generate shared library" OFF)
 option(COMPILE_EXAMPLES "generate examples" ON)
-option(COMPILE_LUA_EXAMPLE "lua support" OFF)
+option(COMPILE_LUA_EXAMPLE "lua support" ON)
 #option(ENABLE_STATIC "generate static library" ON)
 #配置输出及安装目录
 include(${CMAKE_CURRENT_SOURCE_DIR}/compile/common.cmake)
@@ -39,6 +39,7 @@ if(COMPILE_SDL_MODE)
 else()
     MESSAGE(STATUS "not compile sdl module")
 endif()
+
 #add_definitions(-DHID_ENCRYPT)
 
 macro(set_parent_values)
@@ -89,13 +90,17 @@ INSTALL(FILES ${file_item_path} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} RENAME $
 endforeach(item)
 #编译示例
 list(APPEND LINKPATHS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+
 MESSAGE(STATUS "BUILD CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR}")
 MESSAGE(STATUS "BUILD CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_BINDIR}")
 MESSAGE(STATUS "BUILD CMAKE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR}")
 MESSAGE(STATUS "BUILD CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}")
 MESSAGE(STATUS "BUILD CMAKE_CURRENT_BINARY_DIR ${CMAKE_INSTALL_LIBDIR}")
 #引用库目录及文件搜索目录
+add_subdirectory("extern_project/lua-5.2.0/src")
+list(APPEND LINKPATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 link_directories(${LINKPATHS})
+list(APPEND INCLUDEPATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR})
 include_directories(${INCLUDEPATHS})
 if(COMPILE_EXAMPLES)
     add_subdirectory("examples")

@@ -11,7 +11,7 @@ using namespace aimy;
 int lua_test(int argc ,char *argv[]);
 int test(int argc ,char *argv[]);
 sol::state lua;
-std::atomic<bool> is_running=true;
+std::atomic<bool> is_running{true};
 std::mutex task_mutex;
 std::queue<std::function<void()>> task_queue;
 static void push_task(const std::function<void()> &task)
