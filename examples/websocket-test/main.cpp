@@ -210,13 +210,13 @@ int main(int argc,char *argv[])
     std::string port="58090";
     if(argc>3)
     {
-        port=argv[2];
+        port=argv[3];
     }
     AIMY_DEBUG("port:%s default[%s]",port.c_str(),"58090");
     std::string lua_file_path="./test.lua";
     if(argc>4)
     {
-        lua_file_path=argv[3];
+        lua_file_path=argv[4];
     }
     AIMY_DEBUG("lua_file_path:%s default[%s]",lua_file_path.c_str(),"./test.lua");
     exec_websocket_test(api_name,host,port,lua_file_path);
